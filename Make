@@ -1,0 +1,9 @@
+-Q theories Unicoq
+-I src
+
+COQDOC = "$(COQBIN)coqdoc -interpolate -utf8"
+CAMLP4OPTIONS = "-loc loc"
+src/munify.ml4
+src/munify.mllib
+theories/Unicoq.v
+test-suite/munifytest.v
