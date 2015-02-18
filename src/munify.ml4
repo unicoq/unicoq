@@ -1160,14 +1160,12 @@ and unify_evar_conv ts env sigma0 conv_t t t' =
 	     | (false, sigma') -> UnifFailure (sigma', Pretype_errors.NotSameHead))
 
 
-(*let use_munify () = !munify_on
+let use_munify () = !munify_on
 let set_use_munify b = 
-  if b then *)
-let _ = Evarconv.set_evar_conv unify_evar_conv
-(*  else ();
-  munify_on := b *)
+  if !munify_on then ()
+  else Evarconv.set_evar_conv unify_evar_conv;
+  munify_on := b
 
-(*
 let _ = Goptions.declare_bool_option {
   Goptions.optsync = true; 
   Goptions.optdepr = false;
@@ -1176,7 +1174,6 @@ let _ = Goptions.declare_bool_option {
   Goptions.optread = use_munify;
   Goptions.optwrite = set_use_munify;
 }
-*)
 
 (* Now the real tactic. *)
 

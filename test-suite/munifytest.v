@@ -12,8 +12,13 @@ Definition test1 : (_ : nat -> nat) 0 = S 0 := eq_refl.
 
 Definition test2 : match 0 return nat with 0 => (_ : nat -> nat) 0 | _ => 1 end = S 0 := eq_refl.
 
-(* it fails with "equal: functional value*)
+
+Set Aggressive.
 Fail Definition test3 : (_ : nat -> nat) 0 = 0 := eq_refl.
+
+Set Printing Existential Instances.
+
+Definition test3 : (_ : nat -> nat) 0 = 0 := eq_refl.
 
 
 
