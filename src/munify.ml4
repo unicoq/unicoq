@@ -429,6 +429,7 @@ let free_vars_in tm vars =
   Names.Idset.for_all (fun v -> List.mem v vars) (collect_vars tm)
 
 exception CannotPrune
+
 (** ev is the evar and plist the indices to prune.  from ?ev : T[env]
     it creates a new evar ?ev' with a shorter context env' such that
     ?ev := ?ev'[id_env']. If the prunning is unsuccessful, it throws
@@ -630,6 +631,14 @@ let remove_non_var env sigma (ev, subs as evsubs) args =
     let sigma' = prune sigma (ev, ps) in
     (sigma', Reductionops.nf_evar sigma' (mkEvar evsubs), args)
 
+
+let specialize_evar env sigma (ev, subs) args =
+  match args with
+  | [] -> raise CannotPrune
+  | hd :: tl ->
+    let sigma', lam = Evarutil.define_evar_as_lambda env sigma (ev, subs) in
+    let (n, dom, codom) = destLambda (Evarutil.nf_evar sigma' lam) in
+      sigma', subst1 hd codom, tl
 
 exception InternalException
 
@@ -1057,6 +1066,17 @@ and instantiate ?(dir=Original) dbg ts conv_t env sigma
         with CannotPrune -> err sigma
       end
     else err sigma
+  ) ||= (fun _ ->
+    if is_aggressive () then
+      begin
+	(* Meta-Specialize *)
+	debug_str "Meta-Specialize" dbg;
+	try
+	  let (sigma', evsubst', args'') = specialize_evar env sigma evsubs args in
+	    unify' ~conv_t dbg ts env sigma' (evsubst', args'') t
+	with CannotPrune -> err sigma
+      end
+    else err sigma    
   ) ||= (fun _ ->
     if should_try_fo args t then
       begin
