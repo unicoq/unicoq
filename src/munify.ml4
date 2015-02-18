@@ -64,7 +64,7 @@ open Term
 open Recordops
 
 let debug = ref false
-let munify_on = ref true
+let munify_on = ref false
 let aggressive = ref true
 let hash = ref false
 let try_solving_eqn = ref false

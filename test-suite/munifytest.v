@@ -17,7 +17,8 @@ Set Aggressive.
 Fail Definition test3 : (_ : nat -> nat) 0 = 0 := eq_refl.
 
 Set Printing Existential Instances.
-
+Set Munify Debug.
+Set Use Munify.
 Definition test3 : (_ : nat -> nat) 0 = 0 := eq_refl.
 
 
