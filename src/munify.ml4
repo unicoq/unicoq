@@ -69,9 +69,6 @@ let aggressive = ref true
 let hash = ref false
 let try_solving_eqn = ref false
 
-let use_munify () = !munify_on
-let set_use_munify b = munify_on := b
-
 let set_debug b = debug := b
 let get_debug () = !debug
 
@@ -83,15 +80,6 @@ let use_hash () = !hash
 
 let set_solving_eqn b = try_solving_eqn := b
 let get_solving_eqn () = !try_solving_eqn
-
-let _ = Goptions.declare_bool_option {
-  Goptions.optsync = true; 
-  Goptions.optdepr = false;
-  Goptions.optname = "Enable use of new unification algorithm";
-  Goptions.optkey = ["Use";"Munify"];
-  Goptions.optread = use_munify;
-  Goptions.optwrite = set_use_munify;
-}
 
 let _ = Goptions.declare_bool_option {
   Goptions.optsync  = true;
@@ -1167,6 +1155,25 @@ and unify_evar_conv ts env sigma0 conv_t t t' =
   Evarsolve.(match unify ~conv_t:conv_t ts env sigma0 t t' with
 	     | (true, sigma') -> Success sigma'
 	     | (false, sigma') -> UnifFailure (sigma', Pretype_errors.NotSameHead))
+
+
+(*let use_munify () = !munify_on
+let set_use_munify b = 
+  if b then *)
+let _ = Evarconv.set_evar_conv unify_evar_conv
+(*  else ();
+  munify_on := b *)
+
+(*
+let _ = Goptions.declare_bool_option {
+  Goptions.optsync = true; 
+  Goptions.optdepr = false;
+  Goptions.optname = "Enable use of new unification algorithm";
+  Goptions.optkey = ["Use";"Munify"];
+  Goptions.optread = use_munify;
+  Goptions.optwrite = set_use_munify;
+}
+*)
 
 (* Now the real tactic. *)
 
