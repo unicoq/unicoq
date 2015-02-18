@@ -606,6 +606,9 @@ let evar_apprec ts env sigma (c, stack) =
       | _ -> (t,Option.get (*FIXME*)(Reductionops.Stack.list_of_app_stack stack))
   in aux (c, Reductionops.Stack.append_app_list stack Reductionops.Stack.empty)
 
+let eq_app_stack (c, l) (c', l') = 
+  Term.eq_constr c c' && List.for_all2 Term.eq_constr l l'
+
 let array_mem_to_i e i a =
   let j = ref 0 in
   let b = ref false in
@@ -871,7 +874,7 @@ and try_step ?(stuck=NotStucked) dbg conv_t ts env sigma0 (c, l as t) (c', l' as
   match (kind_of_term c, kind_of_term c') with
 
   (* Lam-BetaR *)
-  | _, Lambda (_, _, trm) when l' <> [] ->
+  | _, Lambda (_, _, trm) when not (CList.is_empty l') ->
     debug_str "Lam-BetaR" dbg;
     let t2 = (subst1 (List.hd l') trm, List.tl l') in
     unify' ~conv_t (dbg+1) ts env sigma0 t t2 
@@ -881,9 +884,9 @@ and try_step ?(stuck=NotStucked) dbg conv_t ts env sigma0 (c, l as t) (c', l' as
     let t2 = (subst1 trm body, l') in
     unify' ~conv_t (dbg+1) ts env sigma0 t t2
 
-  | _, Case _ | _, Fix _ when stuck <> StuckedRight ->
+  | _, Case _ | _, Fix _ when stuck != StuckedRight ->
     let t2 = evar_apprec ts env sigma0 t' in
-    if t' <> t2 then
+    if not (eq_app_stack t' t2) then
       begin
 	debug_str "IotaR" dbg;
 	unify' ~conv_t (dbg+1) ts env sigma0 t t2
@@ -893,7 +896,7 @@ and try_step ?(stuck=NotStucked) dbg conv_t ts env sigma0 (c, l as t) (c', l' as
     else err sigma0
 
   (* Lam-BetaL *)
-  | Lambda (_, _, trm), _ when l <> [] ->
+  | Lambda (_, _, trm), _ when not (CList.is_empty l) ->
     debug_str "Lam-BetaL" dbg;
     let t1 = (subst1 (List.hd l) trm, List.tl l) in
     unify' ~conv_t (dbg+1) ts env sigma0 t1 t'
@@ -903,9 +906,9 @@ and try_step ?(stuck=NotStucked) dbg conv_t ts env sigma0 (c, l as t) (c', l' as
     let t1 = (subst1 trm body, l) in
     unify' ~conv_t (dbg+1) ts env sigma0 t1 t'
 
-  | Case _, _ | Fix _, _ when stuck <> StuckedLeft ->
+  | Case _, _ | Fix _, _ when stuck != StuckedLeft ->
     let t2 = evar_apprec ts env sigma0 t in
-    if t <> t2 then
+    if not (eq_app_stack t t2) then
       begin
 	debug_str "IotaL" dbg;
 	unify' ~conv_t (dbg+1) ts env sigma0 t2 t'
@@ -1074,7 +1077,7 @@ and instantiate ?(dir=Original) dbg ts conv_t env sigma
     else
       begin
         let t' = evar_apprec ts env sigma t in
-	if t <> t' then
+	if not (eq_app_stack t t') then
           begin
             debug_str "Meta-Reduce" dbg;
             unify' ~conv_t:conv_t (dbg+1) ts env sigma (mkEvar evsubs, args) t'
