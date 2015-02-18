@@ -360,7 +360,7 @@ let invert map sigma ctx t subs args ev' =
 	else
 	  return (mkRel (List.length sargs - k + i))
 
-      | Evar (ev, evargs) when ev = ev' ->
+      | Evar (ev, evargs) when Evar.equal ev ev' ->
         None
 
       | Evar (ev, evargs) ->
@@ -826,10 +826,10 @@ and compare_heads conv_t dbg ts env sigma0 c c' =
     )
 
   (* Rigid-Same *)
-  | Rel n1, Rel n2 when n1 = n2 ->
+  | Rel n1, Rel n2 when n1 == n2 ->
     debug_str "Rigid-Same" dbg;
     success sigma0
-  | Var id1, Var id2 when id1 = id2 -> 
+  | Var id1, Var id2 when Id.equal id1 id2 -> 
     debug_str "Rigid-Same" dbg;
     success sigma0
   | Const c1, Const c2 when Univ.eq_puniverses Names.eq_constant c1 c2 ->
@@ -844,7 +844,7 @@ and compare_heads conv_t dbg ts env sigma0 c c' =
     success sigma0
 
   | CoFix (i1,(_,tys1,bds1 as recdef1)), CoFix (i2,(_,tys2,bds2))
-    when i1 = i2 ->
+    when i1 == i2 ->
     debug_str "CoFix-Same" dbg;
     ise_array2 sigma0 (unify_constr (dbg+1) ts env) tys1 tys2 &&= fun sigma1 ->
     ise_array2 sigma1 (unify_constr (dbg+1) ts (Environ.push_rec_types recdef1 env)) bds1 bds2
@@ -858,7 +858,7 @@ and compare_heads conv_t dbg ts env sigma0 c c' =
     ) 
 
   | Fix (li1, (_, tys1, bds1 as recdef1)), Fix (li2, (_, tys2, bds2)) 
-    when li1 = li2 ->
+    when li1 == li2 ->
     debug_str "Fix-Same" dbg;
     ise_array2 sigma0 (unify_constr (dbg+1) ts env) tys1 tys2 &&= fun sigma1 ->
     ise_array2 sigma1 (unify_constr (dbg+1) ts (Environ.push_rec_types recdef1 env)) bds1 bds2
@@ -913,7 +913,7 @@ and try_step ?(stuck=NotStucked) dbg conv_t ts env sigma0 (c, l as t) (c', l' as
 	debug_str "IotaL" dbg;
 	unify' ~conv_t (dbg+1) ts env sigma0 t2 t'
       end
-    else if stuck = NotStucked then
+    else if stuck == NotStucked then
       try_step ~stuck:StuckedLeft dbg conv_t ts env sigma0 t t'
     else err sigma0
 (*
@@ -942,7 +942,7 @@ and try_step ?(stuck=NotStucked) dbg conv_t ts env sigma0 (c, l as t) (c', l' as
   (* Constants get unfolded after everything else *)
   | _, Const _
   | _, Rel _
-  | _, Var _ when has_definition ts env c' && stuck = NotStucked ->
+  | _, Var _ when has_definition ts env c' && stuck == NotStucked ->
       if is_stuck ts env sigma0 t' then
 	try_step ~stuck:StuckedRight dbg conv_t ts env sigma0 t t'
       else 
@@ -952,7 +952,7 @@ and try_step ?(stuck=NotStucked) dbg conv_t ts env sigma0 (c, l as t) (c', l' as
 	end
   | Const _, _ 
   | Rel _, _ 
-  | Var _, _  when has_definition ts env c && stuck = StuckedRight ->
+  | Var _, _  when has_definition ts env c && stuck == StuckedRight ->
     debug_str "Cons-DeltaStuckL" dbg;
     unify' ~conv_t (dbg+1) ts env sigma0 (evar_apprec ts env sigma0 (get_def_app_stack env t)) t'
 
@@ -968,11 +968,11 @@ and try_step ?(stuck=NotStucked) dbg conv_t ts env sigma0 (c, l as t) (c', l' as
     unify' ~conv_t (dbg+1) ts env sigma0 (evar_apprec ts env sigma0 (get_def_app_stack env t)) t'
 
   (* Lam-EtaR *)
-  | _, Lambda (name, t1, c1) when l' = [] && not (isLambda c) ->
+  | _, Lambda (name, t1, c1) when CList.is_empty l' && not (isLambda c) ->
     debug_str "Lam-EtaR" dbg;
     eta_match dbg ts env sigma0 (name, t1, c1) t
   (* Lam-EtaL *)
-  | Lambda (name, t1, c1), _ when l = [] && not (isLambda c') ->
+  | Lambda (name, t1, c1), _ when CList.is_empty l && not (isLambda c') ->
     debug_str "Lam-EtaL" dbg;
     eta_match dbg ts env sigma0 (name, t1, c1) t'
 
