@@ -5,3 +5,9 @@
 (************************************************************************************************)
 
 Require Import Unicoq.Unicoq.
+
+Goal True.
+  munify 0 0.
+  Fail munify 0 1.
+  exact I.
+Qed.
