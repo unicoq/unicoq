@@ -838,7 +838,7 @@ and compare_heads conv_t dbg ts env sigma0 c c' =
     )
 
   (* Rigid-Same *)
-  | Rel n1, Rel n2 when n1 == n2 ->
+  | Rel n1, Rel n2 when n1 = n2 ->
     debug_str "Rigid-Same" dbg;
     success sigma0
   | Var id1, Var id2 when Id.equal id1 id2 -> 
@@ -856,7 +856,7 @@ and compare_heads conv_t dbg ts env sigma0 c c' =
     success sigma0
 
   | CoFix (i1,(_,tys1,bds1 as recdef1)), CoFix (i2,(_,tys2,bds2))
-    when i1 == i2 ->
+    when i1 = i2 ->
     debug_str "CoFix-Same" dbg;
     ise_array2 sigma0 (unify_constr (dbg+1) ts env) tys1 tys2 &&= fun sigma1 ->
     ise_array2 sigma1 (unify_constr (dbg+1) ts (Environ.push_rec_types recdef1 env)) bds1 bds2
@@ -870,7 +870,7 @@ and compare_heads conv_t dbg ts env sigma0 c c' =
     ) 
 
   | Fix (li1, (_, tys1, bds1 as recdef1)), Fix (li2, (_, tys2, bds2)) 
-    when li1 == li2 ->
+    when li1 = li2 ->
     debug_str "Fix-Same" dbg;
     ise_array2 sigma0 (unify_constr (dbg+1) ts env) tys1 tys2 &&= fun sigma1 ->
     ise_array2 sigma1 (unify_constr (dbg+1) ts (Environ.push_rec_types recdef1 env)) bds1 bds2
