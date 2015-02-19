@@ -1059,28 +1059,6 @@ and instantiate ?(dir=Original) dbg ts conv_t env sigma
       end
     else err sigma
   ) ||= (fun _ ->
-    if is_aggressive () then
-      begin
-        (* Meta-Prune *)
-        debug_str "Meta-Prune" dbg;
-        try 
-	  let (sigma', evsubs', args'') = remove_non_var env sigma evsubs args in
-	  unify' ~conv_t:conv_t dbg ts env sigma' (evsubs', args'') t
-        with CannotPrune -> err sigma
-      end
-    else err sigma
-  ) ||= (fun _ ->
-    if is_aggressive () then
-      begin
-	(* Meta-Specialize *)
-	debug_str "Meta-Specialize" dbg;
-	try
-	  let (sigma', evsubst', args'') = specialize_evar env sigma evsubs args in
-	    unify' ~conv_t dbg ts env sigma' (evsubst', args'') t
-	with CannotPrune -> err sigma
-      end
-    else err sigma    
-  ) ||= (fun _ ->
     if should_try_fo args t then
       begin
         (* Meta-FO *)
@@ -1107,6 +1085,28 @@ and instantiate ?(dir=Original) dbg ts conv_t env sigma
           end
 	else err sigma
       end
+  ) ||= (fun _ ->
+    if is_aggressive () then
+      begin
+        (* Meta-Prune *)
+        debug_str "Meta-Prune" dbg;
+        try 
+	  let (sigma', evsubs', args'') = remove_non_var env sigma evsubs args in
+	  unify' ~conv_t:conv_t dbg ts env sigma' (evsubs', args'') t
+        with CannotPrune -> err sigma
+      end
+    else err sigma
+  ) ||= (fun _ ->
+    if is_aggressive () then
+      begin
+	(* Meta-Specialize *)
+	debug_str "Meta-Specialize" dbg;
+	try
+	  let (sigma', evsubst', args'') = specialize_evar env sigma evsubs args in
+	    unify' ~conv_t dbg ts env sigma' (evsubst', args'') t
+	with CannotPrune -> err sigma
+      end
+    else err sigma    
   ) ||= (fun _ -> 
     (* if the equation is [?f =?= \x.?f x] the occurs check will fail, but there is a solution: eta expansion *)
     if isLambda h && List.length args' = 0 then
