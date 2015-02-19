@@ -604,7 +604,10 @@ let evar_apprec ts env sigma (c, stack) =
     match kind_of_term t with
       | Evar (evk,_ as ev) when Evd.is_defined sigma evk ->
 	  aux (Evd.existential_value sigma ev, stack)
-      | _ -> (t,Option.get (*FIXME*)(Reductionops.Stack.list_of_app_stack stack))
+      | _ -> 
+	match Reductionops.Stack.list_of_app_stack stack with
+	| None -> decompose_app (Reductionops.Stack.zip (t, stack))
+	| Some stack -> (t, stack)
   in aux (c, Reductionops.Stack.append_app_list stack Reductionops.Stack.empty)
 
 let eq_app_stack (c, l) (c', l') = 
