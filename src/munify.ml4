@@ -69,7 +69,12 @@ let aggressive = ref true
 let hash = ref false
 let try_solving_eqn = ref false
 
-let set_debug b = debug := b
+let set_debug b = 
+  debug := b;
+  if b then (* Evar instances might depend on Anonymous rels *)
+    Detyping.set_detype_anonymous 
+      (fun loc n -> Glob_term.GVar (loc, Id.of_string ("_ANONYMOUS_REL_" ^ string_of_int n)))
+      
 let get_debug () = !debug
 
 let is_aggressive () = !aggressive
@@ -505,7 +510,7 @@ let fill_lambdas_invert_types map env sigma nc body subst args ev =
     let ars = CList.drop_last ars in
     invert map sigma nc ty subst ars ev >>= fun (m, ty) ->
     rmap := m;
-    return (ars, mkLambda (Names.Anonymous, ty, bdy))) args (return (args, body)) 
+    return (ars, mkLambda (Namegen.named_hd env ty Anonymous, ty, bdy))) args (return (args, body)) 
   >>= fun (_, bdy) -> return (!rmap, bdy)
 
 exception ProjectionNotFound

@@ -6,13 +6,6 @@ Variable T : choiceType.
 Implicit Types P Q : pred T.
 Set Munify Debug.
 
-Fail Definition choose P x0 :=
-  if insub x0 : {? x | P x} is Some (exist x Px) then
-    xchoose (ex_intro [eta P] x Px)
-  else x0.
-
-Unset Munify Debug.
-
 Definition choose P x0 :=
   if insub x0 : {? x | P x} is Some (exist x Px) then
     xchoose (ex_intro [eta P] x Px)
@@ -20,4 +13,3 @@ Definition choose P x0 :=
 Check choose.
 (* it should be : pred T -> T -> T *)
 
-End Bal.
