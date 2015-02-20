@@ -1092,24 +1092,6 @@ and instantiate ?(dir=Original) dbg ts conv_t env sigma
     else
       err sigma
   ) ||= (fun _ ->
-    (* Meta-Reduce: before giving up we see if we can reduce on the right *)
-    if has_definition ts env h then
-      begin
-        debug_str "Meta-Reduce" dbg;
-        let t' = evar_apprec ts env sigma (get_def_app_stack env t) in
-        switch (unify' ~conv_t (dbg+1) ts env sigma) (mkEvar evsubs, args) t'
-      end
-    else
-      begin
-        let t' = evar_apprec ts env sigma t in
-	if not (eq_app_stack t t') then
-          begin
-            debug_str "Meta-Reduce" dbg;
-            switch (unify' ~conv_t (dbg+1) ts env sigma) (mkEvar evsubs, args) t'
-          end
-	else err sigma
-      end
-  ) ||= (fun _ ->
     if is_aggressive () then
       begin
         (* Meta-Prune *)
@@ -1131,6 +1113,24 @@ and instantiate ?(dir=Original) dbg ts conv_t env sigma
 	with CannotPrune -> err sigma
       end
     else err sigma    
+  ) ||= (fun _ ->
+    (* Meta-Reduce: before giving up we see if we can reduce on the right *)
+    if has_definition ts env h then
+      begin
+        debug_str "Meta-Reduce" dbg;
+        let t' = evar_apprec ts env sigma (get_def_app_stack env t) in
+        switch (unify' ~conv_t (dbg+1) ts env sigma) (mkEvar evsubs, args) t'
+      end
+    else
+      begin
+        let t' = evar_apprec ts env sigma t in
+	if not (eq_app_stack t t') then
+          begin
+            debug_str "Meta-Reduce" dbg;
+            switch (unify' ~conv_t (dbg+1) ts env sigma) (mkEvar evsubs, args) t'
+          end
+	else err sigma
+      end
   ) ||= (fun _ -> 
     (* if the equation is [?f =?= \x.?f x] the occurs check will fail, but there is a solution: eta expansion *)
     if isLambda h && List.length args' = 0 then
