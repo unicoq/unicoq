@@ -1185,12 +1185,12 @@ and conv_record dbg trs env evd t t' =
     List.fold_left
       (fun (i,ks,m) b ->
 	 match n with
-	 | Some n when m == n -> (i,t2::ks, m-1) 
+	 | Some n when m = n -> (i,t2::ks, m-1) 
 	 | _ ->
 	    let dloc = (Loc.dummy_loc, Evar_kinds.InternalHole) in
               let (i',ev) = Evarutil.new_evar env i ~src:dloc (substl ks b) in
 		(i', ev :: ks, m - 1))
-      (evd,[],List.length bs - 1) bs
+      (evd,[],List.length bs) bs
   in
   debug_str "CS" dbg;
   ise_list2 evd' (fun i x1 x -> unify_constr (dbg+1) trs env i x1 (substl ks x))
@@ -1199,7 +1199,6 @@ and conv_record dbg trs env evd t t' =
     us2 us &&= fun i -> 
   unify' (dbg+1) trs env i (decompose_app c1) (c,(List.rev ks)) &&= fun i ->
   ise_list2 i (unify_constr (dbg+1) trs env) ts ts1
-
 and unify ?(conv_t=Reduction.CONV) = unify_constr ~conv_t:conv_t 0
 
 and swap (a, b) = (b, a) 
