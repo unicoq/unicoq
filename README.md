@@ -59,7 +59,7 @@ unifying them.
 To trace what the algorithm is doing, one can use `Set Munify Debug`
 which will produce a trace on stdout.
 
-The option `Set Munify Aggressive` activates the strong `Meta-Prune` 
+The option `Set Munify Aggressive` activates the strong `Meta-DelDeps` 
 rule to remove dependencies of meta-variables (see the paper for details).
 
 The option `Set Munify Use Hash` enables the use of a hash table to
