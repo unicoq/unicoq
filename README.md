@@ -1,4 +1,4 @@
-# unicoq
+# UniCoq
 An enhanced unification algorithm for Coq
 
 Copyright 2015 Beta Ziliani <beta@mpi-sws.de>,
@@ -10,12 +10,12 @@ This archive contains a new unification algorithm for Coq, as
 a plugin that replaces the existing unification algorithm.
 
 The archive has 3 subdirectories:
-src/ contains the code of the plugin in munify.ml.
+* `src` contains the code of the plugin in `munify.ml4`.
 
-theories/ contains support Coq files for the plugin.
-  Unicoq.v declares the plugin on the Coq side.
+* `theories` contains support Coq files for the plugin.
+  `Unicoq.v` declares the plugin on the Coq side.
 
-test-suite/ just demonstrates a use of the plugin
+* `test-suite` just demonstrates a use of the plugin
 
 Installation
 ============
@@ -29,15 +29,15 @@ Then simply do:
 ```
  # coq_makefile -f Make -o Makefile
 ```
-To generate a makefile from the description in Make, then [make].
+To generate a makefile from the description in Make, then `make`.
 This will consecutively build the plugin, the supporting 
 theories and the test-suite file.
 
 You can then either `make install` the plugin or leave it in its
 current directory. To be able to import it from anywhere in Coq,
-simply add the following to ~/.coqrc:
+simply add the following to `~/.coqrc`:
 ```
-Add Rec LoadPath "path_to_unicoq/theories" as Unicoq.
+Add LoadPath "path_to_unicoq/theories" as Unicoq.
 Add ML Path "path_to_unicoq/src".
 ```
 # Usage
