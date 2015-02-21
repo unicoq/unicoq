@@ -99,7 +99,7 @@ let _ = Goptions.declare_bool_option {
   Goptions.optsync = true; 
   Goptions.optdepr = false;
   Goptions.optname = "Enable more aggressive prunning";
-  Goptions.optkey = ["Aggressive"];
+  Goptions.optkey = ["Munify"; "Aggressive"];
   Goptions.optread = is_aggressive;
   Goptions.optwrite = set_aggressive;
 }
@@ -108,7 +108,7 @@ let _ = Goptions.declare_bool_option {
   Goptions.optsync = true; 
   Goptions.optdepr = false;
   Goptions.optname = "Use a hash table of failures";
-  Goptions.optkey = ["Use";"Hash"];
+  Goptions.optkey = ["Munify"; "Use";"Hash"];
   Goptions.optread = use_hash;
   Goptions.optwrite = set_hash;
 }
@@ -117,29 +117,22 @@ let _ = Goptions.declare_bool_option {
   Goptions.optsync  = true;
   Goptions.optdepr  = false;
   Goptions.optname  = "Try using original algorithm to solve equations ?x = t";
-  Goptions.optkey   = ["Try"; "Solving";"Eqn"];
+  Goptions.optkey   = ["Munify"; "Try"; "Solving";"Eqn"];
   Goptions.optread  = get_solving_eqn;
   Goptions.optwrite = set_solving_eqn 
 }
 
 
-(*** HACK ***)
-(* Shouldn't be a boolean option! *)
 let stat_unif_problems = ref Big_int.zero_big_int
-let stat_solve_simple_eqn = ref Big_int.zero_big_int
+let stat_minst = ref Big_int.zero_big_int
 
-let _ = Goptions.declare_bool_option {
-  Goptions.optsync  = false;
-  Goptions.optdepr  = false;
-  Goptions.optname  = "Print stats";
-  Goptions.optkey   = ["Print";"Stats"];
-  Goptions.optread  = (fun _ -> false);
-  Goptions.optwrite = (fun _ -> 
+VERNAC COMMAND EXTEND PrintMunifyStats CLASSIFIED AS SIDEFF
+  | [ "Print" "Munify" "Stats" ] -> [
     Printf.printf "STATS:\t%s\t\t%s\n" 
       (Big_int.string_of_big_int !stat_unif_problems) 
-      (Big_int.string_of_big_int !stat_solve_simple_eqn))
-}
-
+      (Big_int.string_of_big_int !stat_minst)
+  ]
+END
 
 let evarconv_for_cs = ref true
 let get_evarconv_for_cs = fun _ -> !evarconv_for_cs
@@ -148,7 +141,7 @@ let _ = Goptions.declare_bool_option {
   Goptions.optsync  = false;
   Goptions.optdepr  = false;
   Goptions.optname  = "Use Evarconv for CS";
-  Goptions.optkey   = ["Use";"Evarconv";"For";"CS"];
+  Goptions.optkey   = ["Munify"; "Use";"Evarconv";"For";"CS"];
   Goptions.optread  = get_evarconv_for_cs;
   Goptions.optwrite = fun b -> evarconv_for_cs := b 
 }
@@ -750,7 +743,6 @@ and try_solve_simple_eqn ?(dir=Original) dbg ts conv_t env sigma evsubs args t =
 	match Evarsolve.solve_simple_eqn (unify_evar_conv ts) env sigma (pbty, evsubs, t) with
 	| Evarsolve.Success sigma' ->
 	  Printf.printf "%s" "solve_simple_eqn solved it: ";
-	  stat_solve_simple_eqn := Big_int.succ_big_int !stat_solve_simple_eqn;
 	  debug_eq sigma env Reduction.CONV (mkEvar evsubs, []) (decompose_app t) dbg;
 	  success sigma'
 	| Evarsolve.UnifFailure (sigma', error) -> err sigma
@@ -1096,9 +1088,8 @@ and instantiate' dbg ts dir conv_t env sigma0 (ev, subs as uv) args (h, args') =
 	    if Termops.occur_meta t' || Termops.occur_evar ev t' then 
 	      err sigma2
 	    else
-              (* needed only if an inferred type *)
-	      (* let sigma2, t' = Evarsolve.refresh_universes None env sigma2 t' in *)
-	      success (Evd.define ev t' sigma2)
+	      (stat_minst := Big_int.succ_big_int !stat_minst;
+	       success (Evd.define ev t' sigma2))
 	in
 	  Some p
   in
