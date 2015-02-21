@@ -1,8 +1,9 @@
 # UniCoq
 An enhanced unification algorithm for Coq
 
-Copyright 2015 Beta Ziliani <beta@mpi-sws.de>,
-	       Matthieu Sozeau <mattam@mattam.org>
+Copyright (c) 2015 Beta Ziliani <beta@mpi-sws.de>,
+	           Matthieu Sozeau <mattam@mattam.org>
+	       
 Distributed under the terms of the MIT License,
 see LICENSE for details.
 
