@@ -62,6 +62,11 @@ which will produce a trace on stdout.
 The option `Set Munify Aggressive` activates the strong `Meta-DelDeps` 
 rule to remove dependencies of meta-variables (see the paper for details).
 
+The option `Set Munify Super Aggressive` activates specialization of a
+meta-variable to its instance arguments (in case it is of function
+type). Implies Aggressive. Such arguments can be pruned afterwards to
+fall back into HOPU.
+
 The option `Set Munify Use Hash` enables the use of a hash table to
 record unification failures, improving time performance but consuming 
 more memory.

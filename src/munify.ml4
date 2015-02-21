@@ -66,6 +66,7 @@ open Recordops
 let debug = ref false
 let munify_on = ref false
 let aggressive = ref true
+let super_aggressive = ref false
 let hash = ref false
 let try_solving_eqn = ref false
 
@@ -79,6 +80,11 @@ let get_debug () = !debug
 
 let is_aggressive () = !aggressive
 let set_aggressive b = aggressive := b
+
+let is_super_aggressive () = !super_aggressive
+let set_super_aggressive b = 
+  if b then (aggressive := b; super_aggressive := b)
+  else super_aggressive := b
 
 let set_hash b = hash := b
 let use_hash () = !hash
@@ -102,6 +108,17 @@ let _ = Goptions.declare_bool_option {
   Goptions.optkey = ["Munify"; "Aggressive"];
   Goptions.optread = is_aggressive;
   Goptions.optwrite = set_aggressive;
+}
+
+let _ = Goptions.declare_bool_option {
+  Goptions.optsync = true; 
+  Goptions.optdepr = false;
+  Goptions.optname = 
+    "Enable super aggressive prunning, moving arguments applied to a meta-variable" ^
+      " to its context (can then be pruned): ?X n -> ?Y[n]. Implies aggressive.";
+  Goptions.optkey = ["Munify"; "Super"; "Aggressive"];
+  Goptions.optread = is_super_aggressive;
+  Goptions.optwrite = set_super_aggressive;
 }
 
 let _ = Goptions.declare_bool_option {
@@ -1131,7 +1148,7 @@ and instantiate ?(dir=Original) dbg ts conv_t env sigma
 	 end
        else err sigma
      ) ||= (fun _ ->
-       if false then  (* is_aggressive () then *)
+       if !super_aggressive then
 	 begin
 	(* Meta-Specialize *)
 	   debug_str "Meta-Specialize" dbg;
