@@ -39,3 +39,17 @@ simply add the following to ~/.coqrc:
 
 Add Rec LoadPath "path_to_unicoq/theories" as Unicoq.
 Add ML Path "path_to_unicoq/src".
+
+Usage
+=====
+
+Once installed, you can [Require Import Unicoq.Unicoq] to load the
+plugin, which will install unicoq's unification algorithm as the
+unifier called when typechecking terms (Definitions...) and when
+using the [refine] tactic. Note that Coq's standard [apply], 
+[rewrite] etc... still use a different unification algorithm. 
+On the other hand, if you use Ssreflect all tactics will call 
+unicoq's unifier.
+
+The plugin also defines a tactic [munify t u] taking two terms and 
+unifying them.
