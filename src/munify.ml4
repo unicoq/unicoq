@@ -384,8 +384,7 @@ let invert map sigma ctx t subs args ev' =
             match invert' true c i with
               | Some c' -> c'
               | _ -> 
-		if (not inside_evar) && 
-		   (isVar c || isRel c || Termops.occur_evar ev' c) then
+		if not inside_evar then
 		  begin
 		    (if not (Evar.Map.mem ev !rmap) then
 			rmap := Evar.Map.add ev [j] !rmap
