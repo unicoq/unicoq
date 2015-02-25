@@ -851,21 +851,13 @@ and compare_heads conv_t dbg ts env sigma0 c c' =
       unify_constr ~conv_t (dbg+1) ts (Environ.push_rel (name,None,t1) env) sigma1 c1 c2
 
   | LetIn (name, trm1, ty1, body1), LetIn (_, trm2, ty2, body2) ->
-    (
-      (* Let-Same *)
-      debug_str "Let-Same" dbg;
-      let env' = Environ.push_rel (name, Some trm1, ty1) env in
-	unify_constr (dbg+1) ts env sigma0 ty1 ty2 &&= fun sigma1 ->
-	  unify_constr (dbg+1) ts env sigma0 trm1 trm2 &&= fun sigma2 ->
-	    unify_constr ~conv_t (dbg+1) ts env' sigma2 body1 body2
-    ) ||= (fun _ ->
-      (* Let-Zeta *)
-      debug_str "Let-Zeta" dbg;
-      let body1 = subst1 trm1 body1 in
-      let body2 = subst1 trm2 body2 in
-	unify_constr ~conv_t (dbg+1) ts env sigma0 body1 body2
-     )
-
+    (* Let-Same *)
+    debug_str "Let-Same" dbg;
+    let env' = Environ.push_rel (name, Some trm1, ty1) env in
+    unify_constr (dbg+1) ts env sigma0 ty1 ty2 &&= fun sigma1 ->
+      unify_constr (dbg+1) ts env sigma0 trm1 trm2 &&= fun sigma2 ->
+	unify_constr ~conv_t (dbg+1) ts env' sigma2 body1 body2
+    
   (* Rigid-Same *)
   | Rel n1, Rel n2 when n1 = n2 ->
     debug_str "Rigid-Same" dbg;
@@ -914,13 +906,19 @@ and is_reducible ts env (c, l) =
 and try_step ?(stuck=NotStucked) dbg conv_t ts env sigma0 (c, l as t) (c', l' as t') =
   match (kind_of_term c, kind_of_term c') with
 
+  | LetIn (_, trm1, _, body1), LetIn (_, trm2, _, body2) ->
+      (* Let-ParZeta *)
+      debug_str "Let-ParZeta" dbg;
+      let body1 = subst1 trm1 body1 in
+      let body2 = subst1 trm2 body2 in
+	unify_constr ~conv_t (dbg+1) ts env sigma0 body1 body2
+
   (* Lam-BetaR *)
   | _, Lambda (_, _, trm) when not (CList.is_empty l') ->
     debug_str "Lam-BetaR" dbg;
     let t2 = (subst1 (List.hd l') trm, List.tl l') in
       unify' ~conv_t (dbg+1) ts env sigma0 t t2 
-  (* Let-ZetaR *)
-  | _, LetIn (_, trm, _, body) when not (isLetIn c) ->
+  | _, LetIn (_, trm, _, body) ->
     debug_str "Let-ZetaR" dbg;
     let t2 = (subst1 trm body, l') in
       unify' ~conv_t (dbg+1) ts env sigma0 t t2
@@ -929,7 +927,7 @@ and try_step ?(stuck=NotStucked) dbg conv_t ts env sigma0 (c, l as t) (c', l' as
     let t2 = evar_apprec ts env sigma0 t' in
       if not (eq_app_stack t' t2) then
 	begin
-	  debug_str "IotaR" dbg;
+	  debug_str "Case-IotaR" dbg;
 	  unify' ~conv_t (dbg+1) ts env sigma0 t t2
 	end
       else if stuck = NotStucked then
@@ -942,7 +940,7 @@ and try_step ?(stuck=NotStucked) dbg conv_t ts env sigma0 (c, l as t) (c', l' as
     let t1 = (subst1 (List.hd l) trm, List.tl l) in
       unify' ~conv_t (dbg+1) ts env sigma0 t1 t'
   (* Let-ZetaL *)
-  | LetIn (_, trm, _, body), _ when not (isLetIn c') ->
+  | LetIn (_, trm, _, body), _ ->
     debug_str "Let-ZetaL" dbg;
     let t1 = (subst1 trm body, l) in
       unify' ~conv_t (dbg+1) ts env sigma0 t1 t'
@@ -951,7 +949,7 @@ and try_step ?(stuck=NotStucked) dbg conv_t ts env sigma0 (c, l as t) (c', l' as
     let t2 = evar_apprec ts env sigma0 t in
       if not (eq_app_stack t t2) then
 	begin
-	  debug_str "IotaL" dbg;
+	  debug_str "Case-IotaL" dbg;
 	  unify' ~conv_t (dbg+1) ts env sigma0 t2 t'
 	end
       else if stuck == NotStucked then
