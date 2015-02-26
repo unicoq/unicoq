@@ -821,7 +821,7 @@ and one_is_meta dbg ts conv_t env sigma0 (c, l as t) (c', l' as t') =
 
 and compare_heads conv_t dbg ts env sigma0 c c' =
   match (kind_of_term c, kind_of_term c') with
-  (* Prop-Same, Set-Same, Type-Same, Type-Same-LE *)
+  (* Type-Same *)
   | Sort s1, Sort s2 -> debug_str "Type-Same" dbg;
     begin
       try
@@ -955,28 +955,6 @@ and try_step ?(stuck=NotStucked) dbg conv_t ts env sigma0 (c, l as t) (c', l' as
       else if stuck == NotStucked then
 	try_step ~stuck:StuckedLeft dbg conv_t ts env sigma0 t t'
       else err sigma0
-  (*
-  (* Var-DeltaR *)
-    | _, Rel _ 
-    | _, Var _ when has_definition ts env c' ->
-    debug_str "Delta-VarR" dbg;
-    unify' ~conv_t (dbg+1) ts env sigma0 t (get_def_app_stack env t')
-
-  (* Var-DeltaL *)
-    | Rel _, _ 
-    | Var _, _ when has_definition ts env c ->
-    debug_str "Delta-VarL" dbg;
-    unify' ~conv_t (dbg+1) ts env sigma0 (get_def_app_stack env t) t'
-  *)
-  (*
-    | _, _ when is_reducible ts env t' ->
-    debug_str "FlexibleR" dbg;
-    unify' ~conv_t (dbg+1) ts env sigma0 t (evar_apprec ts env sigma0 t')
-
-    | _, _ when is_reducible ts env t ->
-    debug_str "FlexibleR" dbg;
-    unify' ~conv_t (dbg+1) ts env sigma0 (evar_apprec ts env sigma0 t) t'
-  *)    
 
   (* Constants get unfolded after everything else *)
   | _, Const _
