@@ -151,18 +151,6 @@ VERNAC COMMAND EXTEND PrintMunifyStats CLASSIFIED AS SIDEFF
   ]
 END
 
-let evarconv_for_cs = ref true
-let get_evarconv_for_cs = fun _ -> !evarconv_for_cs
-
-let _ = Goptions.declare_bool_option {
-  Goptions.optsync  = false;
-  Goptions.optdepr  = false;
-  Goptions.optname  = "Use Evarconv for CS";
-  Goptions.optkey   = ["Munify"; "Use";"Evarconv";"For";"CS"];
-  Goptions.optread  = get_evarconv_for_cs;
-  Goptions.optwrite = fun b -> evarconv_for_cs := b 
-}
-
 (** Not in 8.5 *)
 (* Note: let-in contributes to the instance *)
 let make_evar_instance sign args =
