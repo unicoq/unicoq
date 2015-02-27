@@ -1,7 +1,7 @@
 # UniCoq
 An enhanced unification algorithm for Coq
 
-Copyright (c) 2015 Beta Ziliani <beta@mpi-sws.de>,
+Copyright (c) 2015 Beta Ziliani <beta@mpi-sws.org>,
 	           Matthieu Sozeau <mattam@mattam.org>
 	       
 Distributed under the terms of the MIT License,
@@ -21,7 +21,8 @@ The archive has 3 subdirectories:
 Installation
 ============
 
-Through OPAM, this plugin is available in Coq's repo-unstable:
+The plugin works currently with Coq v8.5. Through OPAM, 
+this plugin is available in Coq's repo-unstable:
 ```
  # opam install coq:unicoq
 ```
