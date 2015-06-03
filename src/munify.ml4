@@ -893,14 +893,6 @@ and is_reducible ts env (c, l) =
 
 and try_step ?(stuck=NotStucked) dbg conv_t ts env sigma0 (c, l as t) (c', l' as t') =
   match (kind_of_term c, kind_of_term c') with
-
-  | LetIn (_, trm1, _, body1), LetIn (_, trm2, _, body2) ->
-      (* Let-ParZeta *)
-      debug_str "Let-ParZeta" dbg;
-      let body1 = subst1 trm1 body1 in
-      let body2 = subst1 trm2 body2 in
-	unify_constr ~conv_t (dbg+1) ts env sigma0 body1 body2
-
   (* Lam-BetaR *)
   | _, Lambda (_, _, trm) when not (CList.is_empty l') ->
     debug_str "Lam-BetaR" dbg;
