@@ -8,7 +8,10 @@ Distributed under the terms of the MIT License,
 see LICENSE for details.
 
 This archive contains a new unification algorithm for Coq, as
-a plugin that replaces the existing unification algorithm.
+a plugin that replaces the existing unification algorithm. This
+algorithm is described in detail in
+[A Unification Algorithm for Coq Featuring Universe Polymorphism
+and Overloading](http://www.mpi-sws.org/~beta/#publications).
 
 The archive has 3 subdirectories:
 * `src` contains the code of the plugin in `munify.ml4`.
