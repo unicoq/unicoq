@@ -245,9 +245,17 @@ let (&&=!) opt f =
   | _ -> opt
 
 let latexify s =
-  let s = Str.global_replace (Str.regexp "forall ") "$\\forall$ " s in
-  let s = Str.global_replace (Str.regexp " -> ") " $\\rightarrow$ " s in
-  Str.global_replace (Str.regexp "_") "$\_$" s
+(*  let s = Str.global_replace (Str.regexp "forall ") "$\\forall$ " s in
+  let s = Str.global_replace (Str.regexp " -> ") " $\\rightarrow$ " s in *)
+  let s = Str.global_replace (Str.regexp "{") "\{" s in
+  let s = Str.global_replace (Str.regexp "}") "\}" s in
+  let s = Str.global_replace (Str.regexp "%") " $\\%$ " s in
+  let s = Str.global_replace (Str.regexp "#") " $\\#$ " s in
+  let s = Str.global_replace (Str.regexp "~") " $\\~$ " s in
+  Str.global_replace (Str.regexp "\\") "\\\\" s
+(*  let s = Str.global_replace (Str.regexp "&") " $\\&$ " s in
+  let s = Str.global_replace (Str.regexp "^") " \textasciicircum " s in
+  Str.global_replace (Str.regexp "_") "$\_$" s *)
   
 let log_eq env rule conv_t t1 t2 (l, sigma) = 
   if not (get_debug ()) then
@@ -676,11 +684,11 @@ let debug_eq sigma env t c1 c2 l =
   Printf.printf "\n" 
  
 let print_eq f (conv_t, c1, c2) = 
-  output_string f "\\textsf{";
+  output_string f "\\lstinline{";
   output_string f c1;
   output_string f "}~\approx_{";
   output_string f (if conv_t == Reduction.CONV then "=" else "\leq");
-  output_string f "}~\\textsf{";
+  output_string f "}~\\lstinline{";
   output_string f c2;
   output_string f "}"
 
