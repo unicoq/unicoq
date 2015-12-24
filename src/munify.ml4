@@ -39,7 +39,6 @@ module Logger = struct
     | Initial -> Children [v]
     | Children ls -> Children (v :: ls)
     | n -> Children (v :: n :: [])
-      (* raise CantAddChildToNode *)
 
   let dump s p l =
     let f = open_out_gen [Open_append; Open_creat] 0o666 s in
@@ -245,17 +244,12 @@ let (&&=!) opt f =
   | _ -> opt
 
 let latexify s =
-(*  let s = Str.global_replace (Str.regexp "forall ") "$\\forall$ " s in
-  let s = Str.global_replace (Str.regexp " -> ") " $\\rightarrow$ " s in *)
+  let s = Str.global_replace (Str.regexp "\\\\") "\\\\\\\\" s in
   let s = Str.global_replace (Str.regexp "{") "\{" s in
   let s = Str.global_replace (Str.regexp "}") "\}" s in
   let s = Str.global_replace (Str.regexp "%") " $\\%$ " s in
   let s = Str.global_replace (Str.regexp "#") " $\\#$ " s in
-  let s = Str.global_replace (Str.regexp "~") " $\\~$ " s in
-  Str.global_replace (Str.regexp "\\") "\\\\" s
-(*  let s = Str.global_replace (Str.regexp "&") " $\\&$ " s in
-  let s = Str.global_replace (Str.regexp "^") " \textasciicircum " s in
-  Str.global_replace (Str.regexp "_") "$\_$" s *)
+  Str.global_replace (Str.regexp "~") " $\\~$ " s
   
 let log_eq env rule conv_t t1 t2 (l, sigma) = 
   if not (get_debug ()) then
@@ -574,13 +568,13 @@ let intersect env sigma s1 s2 =
 (* pre: ev is a not-defined evar *)
 let unify_same dbg env sigma ev subs1 subs2 =
   match intersect env sigma subs1 subs2 with
-  | Some [] -> success (dbg, sigma)
+  | Some [] -> (false, success (dbg, sigma))
   | Some l -> begin
               try 
-		success (dbg, prune sigma (ev, l))
-              with CannotPrune -> err
+		(true, success (dbg, prune sigma (ev, l)))
+              with CannotPrune -> (false, err)
               end
-  | _ -> err
+  | _ -> (false, err)
 
 
 
@@ -864,9 +858,10 @@ and one_is_meta dbg ts conv_t env sigma0 (c, l as t) (c', l' as t') =
     if k1 = k2 then
       (* Meta-Same *)
       begin
-        unify_same dbg env sigma0 k1 s1 s2 &&=
-          ise_list2 (unify_constr ts env) l l' &&=! 
-          log_eq_spine env "Meta-Same" conv_t t t'
+        let (b,p) = unify_same dbg env sigma0 k1 s1 s2 in
+        p &&=
+        ise_list2 (unify_constr ts env) l l' &&=! 
+        log_eq_spine env (if b then "Meta-Same" else "Meta-Same-Same") conv_t t t'
       end
     else
       begin
@@ -930,7 +925,7 @@ and compare_heads conv_t dbg ts env sigma0 c c' =
   | Prod (name, t1, c1), Prod (_, t2, c2) ->
     unify_constr ts env t1 t2 (dbg, sigma0) &&=
       unify_constr ~conv_t ts (Environ.push_rel (name,None,t1) env) c1 c2 &&=!
-      log_eq env "Lam-Same" conv_t c c'
+      log_eq env "Prod-Same" conv_t c c'
 
   | LetIn (name, trm1, ty1, body1), LetIn (_, trm2, ty2, body2) ->
     (* Let-Same *)
@@ -938,7 +933,7 @@ and compare_heads conv_t dbg ts env sigma0 c c' =
     unify_constr ts env ty1 ty2 (dbg, sigma0) &&=
       unify_constr ts env trm1 trm2 &&=
 	unify_constr ~conv_t ts env' body1 body2 &&=!
-          log_eq env "Lam-Same" conv_t c c'
+          log_eq env "Let-Same" conv_t c c'
     
   (* Rigid-Same *)
   | Rel n1, Rel n2 when n1 = n2 ->
@@ -1216,7 +1211,7 @@ and instantiate ?(dir=Original) dbg ts conv_t env sigma
 	  if not (eq_app_stack t t') then
             begin
 	      switch (unify' ~conv_t ts env) (mkEvar evsubs, args) t' (dbg, sigma) &&=!
-              log_eq_spine env "Meta-Same" conv_t (mkEvar evsubs, args) t
+              log_eq_spine env "Meta-Reduce" conv_t (mkEvar evsubs, args) t
             end
           else err
         end
