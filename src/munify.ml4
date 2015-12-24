@@ -524,7 +524,7 @@ let rec prune evd (ev, plist) =
   if Evd.is_defined evd ev then evd
   else
   let evi = Evd.find_undefined evd ev in
-  let env = Evd.evar_context evi in
+  let env = Evd.evar_filtered_context evi in
   let env' = remove env plist in
   let env_val' = (List.fold_right Environ.push_named_context_val env' 
                     Environ.empty_named_context_val) in
