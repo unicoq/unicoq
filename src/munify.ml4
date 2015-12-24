@@ -247,9 +247,9 @@ let latexify s =
   let s = Str.global_replace (Str.regexp "\\\\") "\\\\\\\\" s in
   let s = Str.global_replace (Str.regexp "{") "\{" s in
   let s = Str.global_replace (Str.regexp "}") "\}" s in
-  let s = Str.global_replace (Str.regexp "%") " $\\%$ " s in
-  let s = Str.global_replace (Str.regexp "#") " $\\#$ " s in
-  Str.global_replace (Str.regexp "~") " $\\~$ " s
+  let s = Str.global_replace (Str.regexp "%") "\\%" s in
+  let s = Str.global_replace (Str.regexp "#") "\\#" s in
+  Str.global_replace (Str.regexp "~") "\\~" s
   
 let log_eq env rule conv_t t1 t2 (l, sigma) = 
   if not (get_debug ()) then
@@ -1280,11 +1280,13 @@ and conv_record dbg trs env evd t t' =
 and swap (a, b) = (b, a) 
 
 and unify_evar_conv ts env sigma0 conv_t t t' =
+  let interesting log = (* if it's not just Reduce-Same *)
+    match log with Logger.Node (("Reduce-Same", _), Logger.Initial) -> false | _ -> true in
   stat_unif_problems := Big_int.succ_big_int !stat_unif_problems;
   Hashtbl.clear tbl;
   Evarsolve.(match unify_constr ~conv_t:conv_t ts env t t' (Logger.Initial, sigma0) with
 	     | Some (log, sigma') -> 
-                 if get_debug () then
+                 if get_debug () && interesting log then
                    Logger.dump "/tmp/unif.tex" print_eq log
                  else ();
                  Success sigma'
