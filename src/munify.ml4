@@ -32,8 +32,6 @@ module Logger = struct
 
   let addparent v l = Node (v, l)
 
-  exception CantAddChildToNode
-
   let addchild v l = 
     match l with
     | Initial -> Children [v]
@@ -1177,11 +1175,11 @@ and instantiate ?(dir=Original) dbg ts conv_t env sigma
      ) ||= (fun _ ->
        if is_aggressive () then
 	 begin
-        (* Meta-Prune *)
+        (* Meta-DelDeps *)
            try 
 	     let (sigma', evsubs', args'') = remove_non_var env sigma evsubs args in
              switch (unify' ~conv_t ts env) (evsubs', args'') t (dbg, sigma') &&=!
-             log_eq_spine env "Meta-Prune" conv_t (mkEvar evsubs, args) t
+             log_eq_spine env "Meta-DelDeps" conv_t (mkEvar evsubs, args) t
            with CannotPrune -> err
 	 end
        else err
