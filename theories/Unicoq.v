@@ -6,4 +6,4 @@
 
 Declare ML Module "munify".
 
-Global Set Use Munify.
+Global Set Use Unicoq.

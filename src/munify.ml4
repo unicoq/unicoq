@@ -112,6 +112,7 @@ open Recordops
 
 let debug = ref false
 let munify_on = ref false
+let old_fun = Evarconv.evar_conv_x Names.full_transparent_state
 let aggressive = ref true
 let super_aggressive = ref false
 let hash = ref false
@@ -146,7 +147,7 @@ let _ = Goptions.declare_bool_option {
   Goptions.optsync  = true;
   Goptions.optdepr  = false;
   Goptions.optname  = "Debugging for unification";
-  Goptions.optkey   = ["Munify";"Debug"];
+  Goptions.optkey   = ["Unicoq";"Debug"];
   Goptions.optread  = get_debug;
   Goptions.optwrite = set_debug 
 }
@@ -155,7 +156,7 @@ let _ = Goptions.declare_bool_option {
   Goptions.optsync = true; 
   Goptions.optdepr = false;
   Goptions.optname = "Enable more aggressive prunning";
-  Goptions.optkey = ["Munify"; "Aggressive"];
+  Goptions.optkey = ["Unicoq"; "Aggressive"];
   Goptions.optread = is_aggressive;
   Goptions.optwrite = set_aggressive;
 }
@@ -166,7 +167,7 @@ let _ = Goptions.declare_bool_option {
   Goptions.optname = 
     "Enable super aggressive prunning, moving arguments applied to a meta-variable" ^
       " to its context (can then be pruned): ?X n -> ?Y[n]. Implies aggressive.";
-  Goptions.optkey = ["Munify"; "Super"; "Aggressive"];
+  Goptions.optkey = ["Unicoq"; "Super"; "Aggressive"];
   Goptions.optread = is_super_aggressive;
   Goptions.optwrite = set_super_aggressive;
 }
@@ -175,7 +176,7 @@ let _ = Goptions.declare_bool_option {
   Goptions.optsync = true; 
   Goptions.optdepr = false;
   Goptions.optname = "Use a hash table of failures";
-  Goptions.optkey = ["Munify"; "Use";"Hash"];
+  Goptions.optkey = ["Unicoq"; "Use";"Hash"];
   Goptions.optread = use_hash;
   Goptions.optwrite = set_hash;
 }
@@ -184,7 +185,7 @@ let _ = Goptions.declare_bool_option {
   Goptions.optsync  = true;
   Goptions.optdepr  = false;
   Goptions.optname  = "Try using original algorithm to solve equations ?x = t";
-  Goptions.optkey   = ["Munify"; "Try"; "Solving";"Eqn"];
+  Goptions.optkey   = ["Unicoq"; "Try"; "Solving";"Eqn"];
   Goptions.optread  = get_solving_eqn;
   Goptions.optwrite = set_solving_eqn 
 }
@@ -194,7 +195,7 @@ let stat_unif_problems = ref Big_int.zero_big_int
 let stat_minst = ref Big_int.zero_big_int
 
 VERNAC COMMAND EXTEND PrintMunifyStats CLASSIFIED AS SIDEFF
-  | [ "Print" "Munify" "Stats" ] -> [
+  | [ "Print" "Unicoq" "Stats" ] -> [
     Printf.printf "STATS:\t%s\t\t%s\n" 
       (Big_int.string_of_big_int !stat_unif_problems) 
       (Big_int.string_of_big_int !stat_minst)
@@ -1282,26 +1283,27 @@ and unify_evar_conv ts env sigma0 conv_t t t' =
     match log with Logger.Node (("Reduce-Same", _), Logger.Initial) -> false | _ -> true in
   stat_unif_problems := Big_int.succ_big_int !stat_unif_problems;
   Hashtbl.clear tbl;
-  Evarsolve.(match unify_constr ~conv_t:conv_t ts env t t' (Logger.Initial, sigma0) with
-	     | Some (log, sigma') -> 
-                 if get_debug () && interesting log then
-                   Logger.dump "/tmp/unif.tex" print_eq log
-                 else ();
-                 Success sigma'
-	     | None -> UnifFailure (sigma0, Pretype_errors.NotSameHead))
-
+  if !munify_on then
+    Evarsolve.(match unify_constr ~conv_t:conv_t ts env t t' (Logger.Initial, sigma0) with
+	| Some (log, sigma') -> 
+          if get_debug () && interesting log then
+            Logger.dump "/tmp/unif.tex" print_eq log
+          else ();
+          Success sigma'
+        | None -> UnifFailure (sigma0, Pretype_errors.NotSameHead))
+  else
+    old_fun env sigma0 conv_t t t'
 
 let use_munify () = !munify_on
 let set_use_munify b = 
-  if !munify_on then ()
-  else Evarconv.set_evar_conv unify_evar_conv;
+  if b then try Evarconv.set_evar_conv unify_evar_conv with _ -> ();
   munify_on := b
 
 let _ = Goptions.declare_bool_option {
   Goptions.optsync = true; 
   Goptions.optdepr = false;
   Goptions.optname = "Enable use of new unification algorithm";
-  Goptions.optkey = ["Use";"Munify"];
+  Goptions.optkey = ["Use";"Unicoq"];
   Goptions.optread = use_munify;
   Goptions.optwrite = set_use_munify;
 }
