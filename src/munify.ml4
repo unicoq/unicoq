@@ -218,6 +218,11 @@ let instantiate_evar sign c args =
   if inst = [] then c else replace_vars inst c
 (** Not in 8.5 *)
 
+type 'a unif = Success of 'a Logger.log * Evd.evar_map | Err
+
+let success (a,b) = Success (a,b)
+let err = Err
+
 let (>>=) opt f = 
   match opt with
   | Some(x) -> f x
@@ -225,21 +230,26 @@ let (>>=) opt f =
    
 let return x = Some x
 
+let (>>>) opt f = 
+  match opt with
+  | Success (x,y) -> f (x,y)
+  | Err -> Err
+
 let (&&=) opt f = 
   match opt with
-  | Some (l, x) -> f (Logger.Initial, x) >>= (fun l', y -> 
+  | Success (l, x) -> f (Logger.Initial, x) >>> (fun l', y -> 
       let l' = if get_debug () then Logger.addchild l' l else l' in
-      Some (l', y))
+      Success (l', y))
   | _ -> opt
 
 let (||=) opt f = 
   match opt with
-  | None -> f ()
+  | Err -> f ()
   | _ -> opt
 
 let (&&=!) opt f = 
   match opt with
-  | Some x -> f x
+  | Success (x,y) -> f (x,y)
   | _ -> opt
 
 let latexify s =
@@ -252,34 +262,31 @@ let latexify s =
   
 let log_eq env rule conv_t t1 t2 (l, sigma) = 
   if not (get_debug ()) then
-    Some (l, sigma)
+    success (l, sigma)
   else
     let str1 = Pp.string_of_ppcmds (Termops.print_constr_env env t1) in
     let str2 = Pp.string_of_ppcmds (Termops.print_constr_env env t2) in 
     let str1 = latexify str1 in
     let str2 = latexify str2 in
     let l = Logger.addparent (rule, (conv_t, str1, str2)) l in 
-    Some (l, sigma)
+    success (l, sigma)
   
 let log_eq_spine env rule conv_t t1 t2 = 
   log_eq env rule conv_t (applist t1) (applist t2)
 
-let success s = Some s
 
-let err = None
-
-let is_success s = match s with Some _ -> true | _ -> false
+let is_success s = match s with Success _ -> true | _ -> false
 
 
 let ise_list2 f l1 l2 evd =
-  let rec ise_list2 (l, evd as i) l1 l2 =
+  let rec ise_list2 (l, evd) l1 l2 =
     match l1,l2 with
-      [], [] -> success i
+      [], [] -> Success (l, evd)
     | x::l1, y::l2 ->
-      f x y (Logger.Initial, evd) >>= fun (l', evd') ->
+      f x y (Logger.Initial, evd) >>> fun (l', evd') ->
       let l = if get_debug () then Logger.addchild l' l else l' in
       ise_list2 (l, evd') l1 l2
-    | _ -> err in
+    | _ -> Err in
   ise_list2 evd l1 l2
 
 let ise_array2 f v1 v2 evd =
@@ -288,9 +295,9 @@ let ise_array2 f v1 v2 evd =
   assert (l1 <= l2) ;
   let diff = l2 - l1 in
   let rec allrec (l, evdi) n = 
-    if n >= l1 then success (l, evdi)
+    if n >= l1 then Success (l, evdi)
     else
-      f v1.(n) v2.(n+diff) (Logger.Initial, evdi) >>= fun l', i'->
+      f v1.(n) v2.(n+diff) (Logger.Initial, evdi) >>> fun l', i'->
       let l = if get_debug () then Logger.addchild l' l else l' in
       allrec (l, i') (n+1)
   in
@@ -567,13 +574,13 @@ let intersect env sigma s1 s2 =
 (* pre: ev is a not-defined evar *)
 let unify_same dbg env sigma ev subs1 subs2 =
   match intersect env sigma subs1 subs2 with
-  | Some [] -> (false, success (dbg, sigma))
+  | Some [] -> (false, Success (dbg, sigma))
   | Some l -> begin
               try 
-		(true, success (dbg, prune sigma (ev, l)))
-              with CannotPrune -> (false, err)
+		(true, Success (dbg, prune sigma (ev, l)))
+              with CannotPrune -> (false, Err)
               end
-  | _ -> (false, err)
+  | _ -> (false, Err)
 
 
 
@@ -743,7 +750,7 @@ let tbl = Hashtbl.create 1000
 let tblfind t x = try Hashtbl.find t x with Not_found -> false
 
 (* pre: c and c' are in whdnf with our definition of whd *)
-let rec unify' ?(conv_t=Reduction.CONV) ts env (c, l) (c', l') (dbg, sigma0) =
+let rec unify' ?(conv_t=Reduction.CONV) ts env (c, l) (c', l') (dbg, sigma0) : 'a unif =
   let (c, l1) = decompose_app (Evarutil.whd_head_evar sigma0 c) in
   let (c', l2) = decompose_app (Evarutil.whd_head_evar sigma0 c') in
   let l, l' = l1 @ l, l2 @ l' in
@@ -764,7 +771,7 @@ let rec unify' ?(conv_t=Reduction.CONV) ts env (c, l) (c', l') (dbg, sigma0) =
       end
       else if use_hash () && tblfind tbl (sigma0, env, (c,l),(c',l')) then 
         begin
-	  debug_str "Hash-Hit" 0; err 
+	  debug_str "Hash-Hit" 0; err
         end 
       else begin
 	    match (kind_of_term c, kind_of_term c') with
@@ -817,17 +824,17 @@ let rec unify' ?(conv_t=Reduction.CONV) ts env (c, l) (c', l') (dbg, sigma0) =
     else ();
     res
 
-and unify_constr ?(conv_t=Reduction.CONV) ts env t t' : 'a -> 'b =
+and unify_constr ?(conv_t=Reduction.CONV) ts env t t' : 'b -> 'a unif =
   unify' ~conv_t ts env (decompose_app t) (decompose_app t')
 
-and run_and_unify dbg ts env sigma0 args ty =
+and run_and_unify dbg ts env sigma0 args ty : 'a unif =
   let a, f, v = List.nth args 0, List.nth args 1, List.nth args 2 in
     unify' ~conv_t:Reduction.CUMUL ts env (decompose_app a) ty (dbg, sigma0) &&= fun (dbg, sigma1) ->
       match !run_function env sigma1 f with
       | Some (sigma2, v') -> unify' ts env (decompose_app v) (decompose_app v') (dbg, sigma2)
       | _ -> err
 
-and try_solve_simple_eqn ?(dir=Original) dbg ts conv_t env sigma evsubs args t =
+and try_solve_simple_eqn ?(dir=Original) dbg ts conv_t env sigma evsubs args t : 'a unif =
   if get_solving_eqn () then 
     try
       let t = Evarsolve.solve_pattern_eqn env args (applist t) in
@@ -1284,13 +1291,13 @@ and unify_evar_conv ts env sigma0 conv_t t t' =
   stat_unif_problems := Big_int.succ_big_int !stat_unif_problems;
   Hashtbl.clear tbl;
   if !munify_on then
-    Evarsolve.(match unify_constr ~conv_t:conv_t ts env t t' (Logger.Initial, sigma0) with
-	| Some (log, sigma') -> 
-          if get_debug () && interesting log then
-            Logger.dump "/tmp/unif.tex" print_eq log
-          else ();
-          Success sigma'
-        | None -> UnifFailure (sigma0, Pretype_errors.NotSameHead))
+    match unify_constr ~conv_t:conv_t ts env t t' (Logger.Initial, sigma0) with
+    | Success (log, sigma') -> 
+      if get_debug () && interesting log then
+        Logger.dump "/tmp/unif.tex" print_eq log
+      else ();
+      Evarsolve.Success sigma'
+    | Err -> Evarsolve.UnifFailure (sigma0, Pretype_errors.NotSameHead)
   else
     old_fun env sigma0 conv_t t t'
 
@@ -1319,8 +1326,8 @@ let munify_tac gl x y =
   let evars evm = V82.tactic (Refiner.tclEVARS evm) in
   let res = unify_constr (Conv_oracle.get_transp_state (Environ.oracle env)) env x y (Logger.Initial, sigma) in
     match res with
-    | Some (log, evm) -> evars evm
-    | None -> Tacticals.New.tclFAIL 0 (str"Unification failed")
+    | Success (log, evm) -> evars evm
+    | Err -> Tacticals.New.tclFAIL 0 (str"Unification failed")
 
 (* This adds an entry to the grammar of tactics, similar to what
    Tactic Notation does. *)
