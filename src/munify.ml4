@@ -112,7 +112,6 @@ open Recordops
 
 let debug = ref false
 let munify_on = ref false
-let old_fun = Evarconv.evar_conv_x Names.full_transparent_state
 let aggressive = ref true
 let super_aggressive = ref false
 let hash = ref false
@@ -1290,20 +1289,17 @@ and unify_evar_conv ts env sigma0 conv_t t t' =
     match log with Logger.Node (("Reduce-Same", _), Logger.Initial) -> false | _ -> true in
   stat_unif_problems := Big_int.succ_big_int !stat_unif_problems;
   Hashtbl.clear tbl;
-  if !munify_on then
-    match unify_constr ~conv_t:conv_t ts env t t' (Logger.Initial, sigma0) with
-    | Success (log, sigma') -> 
-      if get_debug () && interesting log then
-        Logger.dump "/tmp/unif.tex" print_eq log
-      else ();
-      Evarsolve.Success sigma'
-    | Err -> Evarsolve.UnifFailure (sigma0, Pretype_errors.NotSameHead)
-  else
-    old_fun env sigma0 conv_t t t'
-
+  match unify_constr ~conv_t:conv_t ts env t t' (Logger.Initial, sigma0) with
+  | Success (log, sigma') -> 
+    if get_debug () && interesting log then
+      Logger.dump "/tmp/unif.tex" print_eq log
+    else ();
+    Evarsolve.Success sigma'
+  | Err -> Evarsolve.UnifFailure (sigma0, Pretype_errors.NotSameHead)
+  
 let use_munify () = !munify_on
 let set_use_munify b = 
-  if b then try Evarconv.set_evar_conv unify_evar_conv with _ -> ();
+  if b then try Evarconv.set_evar_conv unify_evar_conv with _ -> ();  
   munify_on := b
 
 let _ = Goptions.declare_bool_option {
