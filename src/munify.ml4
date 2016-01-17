@@ -1172,8 +1172,11 @@ and is_stuck ts env sigma (hd, args) =
 and remove_equal_tail (h, args) (h', args') =
   let rargs = List.rev args in
   let rargs' = List.rev args' in
-  let noccur i xs ys = not (Termops.occur_term i h')
-    && not (List.exists (Termops.occur_term i) ys) in
+  let noccur i xs ys =
+    not (Termops.occur_term i h')
+    && not (Termops.occur_term i h)
+    && not (List.exists (Termops.occur_term i) ys)
+    && not (List.exists (Termops.occur_term i) xs) in
   let rec remove rargs rargs' =
     match rargs, rargs' with
     | (x :: xs), (y :: ys) when eq_constr x y && noccur x xs ys -> remove xs ys
