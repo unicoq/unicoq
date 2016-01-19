@@ -842,7 +842,7 @@ let rec unify' ?(conv_t=Reduction.CONV) ts env (c, l) (c', l') (dbg, sigma0) : '
       if b then
         report (log_eq_spine env "Reduce-Same" conv_t t t' (dbg, sigma1))
       else if use_hash () && tblfind tbl (sigma0, env, (c,l),(c',l')) then begin
-        log_eq_spine env "Hash-Hit" conv_t t t' (dbg, sigma1) &&= fun db, _ ->
+        log_eq_spine env "Hash-Hit" conv_t t t' (dbg, sigma1) &&= fun dbg, _ ->
 	  report (Err dbg)
       end 
       else begin
@@ -1077,8 +1077,8 @@ and try_step ?(stuck=NotStucked) dbg conv_t ts env sigma0 (c, l as t) (c', l' as
   | _, LetIn (_, trm, _, body) ->
     let t2 = (subst1 trm body, l') in
     report (
-    log_eq_spine env "Let-ZetaR" conv_t t t' (dbg, sigma0) &&=
-    unify' ~conv_t ts env t t2)
+      log_eq_spine env "Let-ZetaR" conv_t t t' (dbg, sigma0) &&=
+      unify' ~conv_t ts env t t2)
 
   | _, Case _ | _, Fix _ when stuck != StuckedRight ->
     let t2 = evar_apprec ts env sigma0 t' in
@@ -1375,11 +1375,12 @@ and conv_record dbg trs env evd t t' =
 	    (i', ev :: ks, m - 1))
       (evd,[],List.length bs) bs
   in
-  log_eq_spine env "CS" Reduction.CONV t t' (dbg, evd') &&=
-  ise_list2 (fun x1 x -> unify_constr trs env x1 (substl ks x)) params1 params &&=
-  ise_list2 (fun u1 u -> unify_constr trs env u1 (substl ks u)) us2 us &&=
-  unify' trs env (decompose_app c1) (c,(List.rev ks)) &&=
-  ise_list2 (unify_constr trs env) ts ts1
+  report (
+    log_eq_spine env "CS" Reduction.CONV t t' (dbg, evd') &&=
+    ise_list2 (fun x1 x -> unify_constr trs env x1 (substl ks x)) params1 params &&=
+    ise_list2 (fun u1 u -> unify_constr trs env u1 (substl ks u)) us2 us &&=
+    unify' trs env (decompose_app c1) (c,(List.rev ks)) &&=
+    ise_list2 (unify_constr trs env) ts ts1)
 
 and swap (a, b) = (b, a) 
 
