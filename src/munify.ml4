@@ -942,14 +942,26 @@ and one_is_meta dbg ts conv_t env sigma0 (c, l as t) (c', l' as t') =
     else
       begin
 	(* Meta-Meta *)
-        if k1 > k2 then
-          instantiate ts conv_t env e1 l t' sigma0 dbg
-          ||= instantiate ~dir:Swap ts conv_t env e2 l' t sigma0
+        if Array.length s1 > Array.length s2 then
+          meta_inst Original ts conv_t env e1 l t' sigma0 dbg
+          ||= meta_inst Swap ts conv_t env e2 l' t sigma0
+          ||= meta_fo Original conv_t ts env e1 l t' sigma0
+          ||= meta_fo Swap conv_t ts env e2 l' t sigma0
+          ||= meta_deldeps Original ts conv_t env e1 l t' sigma0
+          ||= meta_deldeps Swap ts conv_t env e2 l' t sigma0
+          ||= meta_specialize Original ts conv_t env e1 l t' sigma0
+          ||= meta_specialize Swap ts conv_t env e2 l' t sigma0
           ||= try_solve_simple_eqn ts conv_t env e1 l t' sigma0
         else
-          instantiate ~dir:Swap ts conv_t env e2 l' t sigma0 dbg
-          ||= instantiate ts conv_t env e1 l t' sigma0
-          ||= try_solve_simple_eqn ~dir:Swap ts conv_t env e2 l' t sigma0
+          meta_inst Swap ts conv_t env e2 l' t sigma0 dbg
+          ||= meta_inst Original ts conv_t env e1 l t' sigma0
+          ||= meta_fo Swap conv_t ts env e2 l' t sigma0
+          ||= meta_fo Original conv_t ts env e1 l t' sigma0
+          ||= meta_deldeps Swap ts conv_t env e2 l' t sigma0
+          ||= meta_deldeps Original ts conv_t env e1 l t' sigma0
+          ||= meta_specialize Swap ts conv_t env e2 l' t sigma0
+          ||= meta_specialize Original ts conv_t env e1 l t' sigma0
+          ||= try_solve_simple_eqn ts conv_t env e1 l t' sigma0
       end
   else
   if isEvar c then
@@ -1314,7 +1326,7 @@ and meta_eta dir ts conv_t env (ev, subs as evsubs) args (h, args' as t) sigma d
 and instantiate ?(dir=Original) ts conv_t env 
     (ev, subs as evsubs) args (h, args' as t) sigma dbg =
   meta_inst dir ts conv_t env evsubs args t sigma dbg
-  ||= meta_fo dir conv_t ts env (evsubs, args) t sigma
+  ||= meta_fo dir conv_t ts env evsubs args t sigma
   ||= meta_deldeps dir ts conv_t env evsubs args t sigma
   ||= meta_specialize dir ts conv_t env evsubs args t sigma
   ||= meta_reduce dir ts conv_t env evsubs args t sigma
@@ -1324,7 +1336,7 @@ and should_try_fo args (h, args') =
   List.length args > 0 && List.length args' >= List.length args
 
 (* ?e a1 a2 = h b1 b2 b3 ---> ?e = h b1 /\ a1 = b2 /\ a2 = b3 *)
-and meta_fo dir conv_t ts env (evsubs, args) (h, args' as t) sigma dbg =
+and meta_fo dir conv_t ts env evsubs args (h, args' as t) sigma dbg =
   if not (should_try_fo args t) then Err dbg
   else
     let (args'1,args'2) =
