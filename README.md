@@ -61,7 +61,10 @@ unifying them.
 ### Options, debugging
 
 To trace what the algorithm is doing, one can use `Set Unicoq Debug`
-which will produce a trace on stdout.
+which will produce a trace on stdout. Additionally, if a file is set
+using `Set Unicoq LaTex File "file.tex"` the algorithm, upon success,
+will write a derivation tree in LaTex. In the directory `doc` there is 
+a file named `treelog.tex` with an example on how to build such document.
 
 The option `Set Unicoq Aggressive` activates the strong `Meta-DelDeps` 
 rule to remove dependencies of meta-variables (see the paper for details).
