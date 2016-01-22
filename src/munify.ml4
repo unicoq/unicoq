@@ -90,7 +90,7 @@ module Logger = struct
     | Node ((s, (conv_t, c1, c2)), _, st, ls) ->
       pad i;
       output_string stdout c1;
-      output_string stdout " =?= ";
+      output_string stdout (if conv_t = Reduction.CONV then " =?= " else " =<= ");
       output_string stdout c2;
       output_string stdout " (";
       output_string stdout s;
