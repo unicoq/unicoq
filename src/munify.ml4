@@ -63,11 +63,9 @@ module Logger = struct
       l := Node (v, p, s, (n::c));
       n
       
-  exception DebugException
-
   let report b l =
     match !l with
-    | Initial -> l (* raise DebugException *)
+    | Initial -> l
     | Node (v, p, _, c) ->
       l := Node (v, p, b, c);
       if is_init p then l else p
@@ -84,7 +82,7 @@ module Logger = struct
     | Initial -> l
     | Node (_, p, _, _) -> to_parent (parent l)
 
-  let rec dump2 i l =
+  let rec print_to_stdout i l =
     match !l with
     | Initial -> ()
     | Node ((s, (conv_t, c1, c2)), _, st, ls) ->
@@ -99,11 +97,11 @@ module Logger = struct
         output_string stdout " OK\n"
       else
         output_string stdout " ERR\n";
-      List.iter (dump2 (i+1)) (List.rev ls)
+      List.iter (print_to_stdout (i+1)) (List.rev ls)
 
-  let dump2 l = dump2 0 (to_parent l)
+  let print_to_stdout l = print_to_stdout 0 (to_parent l)
 
-  let dump s p l =
+  let print_latex s p l =
     let f = open_out_gen [Open_append; Open_creat] 0o666 s in
     let rec dump l =
       match !l with
@@ -125,7 +123,13 @@ module Logger = struct
     flush f;
     close_out f
 
-  let dump s p l = dump s p (to_parent l)
+  let print_latex s p l =
+    if s = "" then
+      Printf.printf "Warning: no LaTex file set with [Set Unicoq LaTex File 'file']. No LaTex output will be generated.\n"
+    else
+      try
+        print_latex s p (to_parent l)
+      with Sys_error p -> Printf.printf "Logger error: '%s'\n" p
   
 end
 
@@ -251,6 +255,17 @@ let _ = Goptions.declare_bool_option {
   Goptions.optkey   = ["Unicoq"; "Try"; "Solving";"Eqn"];
   Goptions.optread  = get_solving_eqn;
   Goptions.optwrite = set_solving_eqn 
+}
+
+let latex_file = ref ""
+
+let _ = Goptions.declare_string_option {
+  Goptions.optsync = true;
+  Goptions.optdepr = false;
+  Goptions.optname = "Enable use of new unification algorithm";
+  Goptions.optkey = ["Unicoq";"LaTex";"File"];
+  Goptions.optread = (fun () -> !latex_file);
+  Goptions.optwrite = (fun s-> latex_file := s);
 }
 
 
@@ -1404,13 +1419,13 @@ and unify_evar_conv ts env sigma0 conv_t t t' =
   | Success (log, sigma') -> 
     if get_debug () && interesting log then
       begin
-        Logger.dump "/tmp/unif.tex" print_eq log;
-        Logger.dump2 log;
+        Logger.print_latex !latex_file print_eq log;
+        Logger.print_to_stdout log;
       end
     else ();
     Evarsolve.Success sigma'
   | Err log -> 
-    if get_debug () then Logger.dump2 log;
+    if get_debug () then Logger.print_to_stdout log;
     Evarsolve.UnifFailure (sigma0, Pretype_errors.NotSameHead)
   
 let use_munify () = !munify_on

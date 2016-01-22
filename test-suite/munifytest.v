@@ -8,6 +8,7 @@ Require Import Unicoq.Unicoq.
 Print Unicoq Stats.
 Set Unicoq Aggressive.
 Set Unicoq Debug.
+Set Unicoq LaTex File "unif.tex".
 
 Definition test1 : (_ : nat -> nat) 0 = S 0 := eq_refl.
 
