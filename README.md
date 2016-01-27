@@ -1,7 +1,10 @@
 # UniCoq
+
+![Unicoq logo](http://github.com/unicoq/unicoq/doc/unicoq.png)
+
 An enhanced unification algorithm for Coq
 
-Copyright (c) 2015 Beta Ziliani <beta@mpi-sws.org>,
+Copyright (c) 2015 Beta Ziliani <bziliani@famaf.unc.edu.ar>,
 	           Matthieu Sozeau <mattam@mattam.org>
 	       
 Distributed under the terms of the MIT License,
