@@ -7,3 +7,4 @@ src/munify.ml4
 src/munify.mllib
 theories/Unicoq.v
 test-suite/munifytest.v
+test-suite/abstract.v

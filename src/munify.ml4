@@ -54,9 +54,28 @@ module Logger = struct
   let is_init l = match !l with Initial -> true | _ -> false
 
   let currentNode l = !l
+
+  let rec pad l = 
+    if l <= 0 then () else (Printf.printf "_"; pad (l-1))
+
+  let rec depth l =
+    match !l with
+    | Initial -> 0
+    | Node (_, p, _, _) -> depth p + 1
+
+  let print_node (s, (conv_t, c1, c2)) =
+    output_string stdout c1;
+    output_string stdout (if conv_t = Reduction.CONV then " =?= " else " =<= ");
+    output_string stdout c2;
+    output_string stdout " (";
+    output_string stdout s;
+    output_string stdout ")"
   
   let newNode v l =
     let n = ref (Node (v, l, true, [])) in
+    pad (depth l);
+    print_node v;
+    output_string stdout "\n";
     match !l with
     | Initial -> n
     | Node (v, p, s, c) -> 
@@ -74,25 +93,17 @@ module Logger = struct
 
   let reportErr = report false
 
-  let rec pad l = 
-    if l <= 0 then () else (Printf.printf "_"; pad (l-1))
-
   let rec to_parent l =
     match !(parent l) with
     | Initial -> l
     | Node (_, p, _, _) -> to_parent (parent l)
-
+    
   let rec print_to_stdout i l =
     match !l with
     | Initial -> ()
-    | Node ((s, (conv_t, c1, c2)), _, st, ls) ->
+    | Node (n, _, st, ls) ->
       pad i;
-      output_string stdout c1;
-      output_string stdout (if conv_t = Reduction.CONV then " =?= " else " =<= ");
-      output_string stdout c2;
-      output_string stdout " (";
-      output_string stdout s;
-      output_string stdout ")";
+      print_node n;
       if st then
         output_string stdout " OK\n"
       else
@@ -180,6 +191,7 @@ open Recordops
 
 let debug = ref false
 let munify_on = ref false
+let imitate = ref true
 let aggressive = ref true
 let super_aggressive = ref false
 let hash = ref false
@@ -338,6 +350,7 @@ let latexify s =
   let s = Str.global_replace (Str.regexp "}") "\}" s in
   let s = Str.global_replace (Str.regexp "%") "\\%" s in
   let s = Str.global_replace (Str.regexp "#") "\\#" s in
+  let s = Str.global_replace (Str.regexp "__:=") "" s in (* remove names in subs *)
   Str.global_replace (Str.regexp "~") "\\~" s
   
 let log_eq env rule conv_t t1 t2 (l, sigma) = 
@@ -356,6 +369,8 @@ let log_eq_spine env rule conv_t t1 t2 =
 
 
 let is_success s = match s with Success _ -> true | _ -> false
+let decompose_success s = 
+  match s with Success (d,s) -> (d, s) | _ -> raise Not_found
 
 
 let ise_list2 f l1 l2 =
@@ -828,6 +843,41 @@ let tblfind t x = try Hashtbl.find t x with Not_found -> false
   
 let switch dir f t u = if dir == Original then f t u else f u t
 
+let find_all_occurrences u t =
+  let rec aux (l : Term.constr list) t : Term.constr list = 
+    match kind_of_term t with
+    | App (h, args) -> 
+      let l = Array.fold_right (fun a b->aux b a) args l in
+      if eq_constr u h then (t :: l) else l
+    | Prod _ | Lambda _ -> l (* stop at binders *)
+    | _ -> fold_constr aux l t
+  in aux [] t
+
+let abstract_ith_occurrence i u t =
+  let i = ref i in
+  let rec aux t : Term.constr = 
+    if !i < 0 then t
+    else
+      match kind_of_term t with
+      | Rel i -> mkRel (i+1)
+      | App (h, args) -> 
+        if eq_constr u h then 
+          if !i = 0 then 
+            begin
+              i := !i-1;
+              mkRel 1
+            end
+          else
+            begin
+              i := !i-1;
+              mkApp (h, Array.map aux args)
+            end
+        else
+          mkApp (h, Array.map aux args)
+      | Prod _ | Lambda _ -> t (* stop at binders *)
+      | _ -> map_constr aux t
+  in aux t
+  
 
 (* pre: c and c' are in whdnf with our definition of whd *)
 let rec unify' ?(conv_t=Reduction.CONV) ts env (c, l) (c', l') (dbg, sigma0) : 'a unif =
@@ -960,8 +1010,8 @@ and one_is_meta dbg ts conv_t env sigma0 (c, l as t) (c', l' as t') =
         if Array.length s1 > Array.length s2 then
           meta_inst Original ts conv_t env e1 l t' sigma0 dbg
           ||= meta_inst Swap ts conv_t env e2 l' t sigma0
-          ||= meta_fo Original conv_t ts env e1 l t' sigma0
-          ||= meta_fo Swap conv_t ts env e2 l' t sigma0
+          ||= meta_fo Original ts conv_t env e1 l t' sigma0
+          ||= meta_fo Swap ts conv_t env e2 l' t sigma0
           ||= meta_deldeps Original ts conv_t env e1 l t' sigma0
           ||= meta_deldeps Swap ts conv_t env e2 l' t sigma0
           ||= meta_specialize Original ts conv_t env e1 l t' sigma0
@@ -970,8 +1020,8 @@ and one_is_meta dbg ts conv_t env sigma0 (c, l as t) (c', l' as t') =
         else
           meta_inst Swap ts conv_t env e2 l' t sigma0 dbg
           ||= meta_inst Original ts conv_t env e1 l t' sigma0
-          ||= meta_fo Swap conv_t ts env e2 l' t sigma0
-          ||= meta_fo Original conv_t ts env e1 l t' sigma0
+          ||= meta_fo Swap ts conv_t env e2 l' t sigma0
+          ||= meta_fo Original ts conv_t env e1 l t' sigma0
           ||= meta_deldeps Swap ts conv_t env e2 l' t sigma0
           ||= meta_deldeps Original ts conv_t env e1 l t' sigma0
           ||= meta_specialize Swap ts conv_t env e2 l' t sigma0
@@ -1337,21 +1387,75 @@ and meta_eta dir ts conv_t env (ev, subs as evsubs) args (h, args' as t) sigma d
   else
     Err dbg
 
-(* by invariant, we know that ev is uninstantiated *)
+(* by invariant, we know that ev is uninstantiated and 
+   that h is not a meta-variable *)
 and instantiate ?(dir=Original) ts conv_t env 
     (ev, subs as evsubs) args (h, args' as t) sigma dbg =
   meta_inst dir ts conv_t env evsubs args t sigma dbg
-  ||= meta_fo dir conv_t ts env evsubs args t sigma
+  ||= meta_fo dir ts conv_t env evsubs args t sigma
   ||= meta_deldeps dir ts conv_t env evsubs args t sigma
+  ||= meta_imitate dir ts conv_t env evsubs args t sigma
   ||= meta_specialize dir ts conv_t env evsubs args t sigma
   ||= meta_reduce dir ts conv_t env evsubs args t sigma
   ||= meta_eta dir ts conv_t env evsubs args t sigma
-      
+
+
+and unify_only_once ts env t ls sigma dbg =
+  CList.fold_left_i (fun i (k, r) c -> 
+      if k < 0 then (k, r) (* there were two already, fail *)
+      else
+        let res = unify_constr ts env t c (dbg, sigma) in
+        if is_success res then
+          if is_success r then
+            (-1, Err dbg) (* two occurrences: fail *)
+          else
+            (i, res) (* we have a candidate *)
+        else (k, r) (* this is no candidate, we throw back whatever was found so far *)
+    ) 0 (0, Err dbg) ls
+
+and meta_imitate dir ts conv_t env (ev, subs as evsubs) args (h, args' as t) sigma dbg =
+  if List.length args > 0 then
+    let hd = List.hd args in
+    if Term.isApp hd then
+      let hdhd, hdargs = destApp hd in
+      if Term.(isRel hdhd || isVar hdhd || isInd hdhd 
+               || isConst hdhd || isConstruct hdhd || isProj hdhd)
+      && Array.length hdargs > 0 then
+        (* the first argument of the meta-variable is 
+           something of the form [c a b c d] *)
+        let t' = applist t in
+        let l = find_all_occurrences hdhd t' in
+        begin
+          log_eq_spine env "Meta-Imitate" conv_t (mkEvar evsubs, args) 
+            t (dbg, sigma) &&= fun (dbg, sigma) ->
+            report (
+              let (i, r) = unify_only_once ts env hd l sigma dbg in
+              if is_success r then
+                let (dbg, sigma) = decompose_success r in
+                if Evd.is_undefined sigma ev then
+                  let t' = abstract_ith_occurrence i hdhd t' in
+                  let sigma, lam = Evarutil.define_evar_as_lambda env sigma evsubs in
+                  let (n, ty, _) = destLambda lam in
+                  let t' = mkLambda (n, ty, t') in
+                  switch dir (unify' ~conv_t ts env) (lam, List.tl args) (decompose_app t') (dbg, sigma)
+                else
+                  r (* during unification the meta-var was instantiated already *)
+              else
+                r
+            )
+        end
+      else
+        Err dbg
+    else 
+      Err dbg
+  else
+    Err dbg
+
 and should_try_fo args (h, args') =
   List.length args > 0 && List.length args' >= List.length args
 
 (* ?e a1 a2 = h b1 b2 b3 ---> ?e = h b1 /\ a1 = b2 /\ a2 = b3 *)
-and meta_fo dir conv_t ts env evsubs args (h, args' as t) sigma dbg =
+and meta_fo dir ts conv_t env evsubs args (h, args' as t) sigma dbg =
   if not (should_try_fo args t) then Err dbg
   else
     let (args'1,args'2) =
