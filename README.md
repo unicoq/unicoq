@@ -1,6 +1,6 @@
 # UniCoq
 
-![Unicoq logo](http://github.com/unicoq/unicoq/blob/master/doc/unicoq.png?raw=true)
+![Unicoq logo](/doc/unicoq.png?raw=true)
 
 An enhanced unification algorithm for Coq
 
