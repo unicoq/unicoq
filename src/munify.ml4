@@ -54,12 +54,34 @@ module Logger = struct
   let is_init l = match !l with Initial -> true | _ -> false
 
   let currentNode l = !l
+
+  let rec pad l = 
+    if l <= 0 then () else (Printf.printf "_"; pad (l-1))
+
+  let rec depth l =
+    match !l with
+    | Initial -> 0
+    | Node (_, p, _, _) -> depth p + 1
+
+  let print_node (s, (conv_t, c1, c2)) =
+    output_string stdout c1;
+    output_string stdout (if conv_t = Reduction.CONV then " =?= " else " =<= ");
+    output_string stdout c2;
+    output_string stdout " (";
+    output_string stdout s;
+    output_string stdout ")"
   
-  let newNode v l =
+  let newNode print v l =
     let n = ref (Node (v, l, true, [])) in
     match !l with
     | Initial -> n
     | Node (v, p, s, c) -> 
+      if print then
+        begin
+          pad (depth l);
+          print_node v;
+          output_string stdout "\n";
+        end;
       l := Node (v, p, s, (n::c));
       n
       
@@ -74,9 +96,6 @@ module Logger = struct
 
   let reportErr = report false
 
-  let rec pad l = 
-    if l <= 0 then () else (Printf.printf "_"; pad (l-1))
-
   let rec to_parent l =
     match !(parent l) with
     | Initial -> l
@@ -85,14 +104,9 @@ module Logger = struct
   let rec print_to_stdout i l =
     match !l with
     | Initial -> ()
-    | Node ((s, (conv_t, c1, c2)), _, st, ls) ->
+    | Node (n, _, st, ls) ->
       pad i;
-      output_string stdout c1;
-      output_string stdout (if conv_t = Reduction.CONV then " =?= " else " =<= ");
-      output_string stdout c2;
-      output_string stdout " (";
-      output_string stdout s;
-      output_string stdout ")";
+      print_node n;
       if st then
         output_string stdout " OK\n"
       else
@@ -219,6 +233,16 @@ let _ = Goptions.declare_bool_option {
   Goptions.optwrite = set_debug 
 }
 
+let trace = ref false
+let _ = Goptions.declare_bool_option {
+  Goptions.optsync  = true;
+  Goptions.optdepr  = false;
+  Goptions.optname  = "Prints the trace for unification";
+  Goptions.optkey   = ["Unicoq";"Trace"];
+  Goptions.optread  = (fun () -> !trace);
+  Goptions.optwrite = (fun b -> trace := b);
+}
+
 let _ = Goptions.declare_bool_option {
   Goptions.optsync = true; 
   Goptions.optdepr = false;
@@ -338,17 +362,18 @@ let latexify s =
   let s = Str.global_replace (Str.regexp "}") "\}" s in
   let s = Str.global_replace (Str.regexp "%") "\\%" s in
   let s = Str.global_replace (Str.regexp "#") "\\#" s in
+  let s = Str.global_replace (Str.regexp "__:=") "" s in (* remove useless names in evar subs *)
   Str.global_replace (Str.regexp "~") "\\~" s
   
 let log_eq env rule conv_t t1 t2 (l, sigma) = 
-  if not (get_debug ()) then
+  if not (get_debug () || !trace) then
     Success (l, sigma)
   else
     let str1 = Pp.string_of_ppcmds (Termops.print_constr_env env t1) in
     let str2 = Pp.string_of_ppcmds (Termops.print_constr_env env t2) in 
     let str1 = latexify str1 in
     let str2 = latexify str2 in
-    let l = Logger.newNode (rule, (conv_t, str1, str2)) l in 
+    let l = Logger.newNode !trace (rule, (conv_t, str1, str2)) l in 
     Success (l, sigma)
   
 let log_eq_spine env rule conv_t t1 t2 = 
@@ -578,20 +603,19 @@ let some_or_prop o =
     | Some tm -> tm
 
 (** removes the positions in the list, and all dependent elements *)
-let remove l pos =
-  let length = List.length l in
+let remove sigma l pos =
   let l = List.rev l in
   let rec remove' i l vs =
     match l with
       | [] -> []
       | ((x, o, t as p) :: s) -> 
         if List.mem i pos 
-	  || free_vars_intersect t vs 
-	  || free_vars_intersect (some_or_prop o) vs then
+	  || free_vars_intersect (Reductionops.nf_evar sigma t) vs 
+	  || free_vars_intersect (Reductionops.nf_evar sigma (some_or_prop o)) vs then
           remove' (i-1) s (x :: vs)
         else
           (p :: remove' (i-1) s vs)
-  in List.rev (remove' (length-1) l [])
+  in List.rev (remove' (List.length l-1) l [])
 
 let free_vars_in tm vars = 
   Names.Idset.for_all (fun v -> List.mem v vars) (collect_vars tm)
@@ -608,7 +632,7 @@ let rec prune evd (ev, plist) =
   else
   let evi = Evd.find_undefined evd ev in
   let env = Evd.evar_filtered_context evi in
-  let env' = remove env plist in
+  let env' = remove evd env plist in
   let env_val' = (List.fold_right Environ.push_named_context_val env' 
                     Environ.empty_named_context_val) in
   (* the type of the evar may contain an evar depending on the some of
@@ -790,6 +814,18 @@ let evar_apprec ts env sigma (c, stack) =
 let eq_app_stack (c, l) (c', l') = 
   Term.eq_constr c c' && List.for_all2 Term.eq_constr l l'
 
+let array_mem_from_i e i a =
+  let j = ref i in
+  let length = Array.length a in
+  let b = ref false in
+  while !j < length && not !b do 
+    if a.(!j) = e then
+      b := true
+    else
+      j := !j+1
+  done;
+  !b
+
 let array_mem_to_i e i a =
   let j = ref 0 in
   let b = ref false in
@@ -802,10 +838,9 @@ let array_mem_to_i e i a =
   !b
 
 let remove_non_var env sigma (ev, subs as evsubs) args =
-  let length = Array.length subs in
-  let (_, ps) = Array.fold_right (fun a (i, s) -> 
-    if isVarOrRel a && not (array_mem_to_i a i subs || List.mem a args) then (i-1,s)
-    else (i-1, i::s)) subs (length-1, [])  in
+  let ps = CArray.fold_right_i (fun i a s -> 
+    if isVarOrRel a && not (array_mem_to_i a i subs || List.mem a args) then s
+    else i::s) subs [] in
   if ps = [] then raise CannotPrune
   else
     let sigma' = prune sigma (ev, ps) in

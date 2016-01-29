@@ -36,8 +36,62 @@ Goal True.
   exact I.
 Qed.
 
+
+Unset Unicoq Debug.
+Set Unicoq Aggressive.
+Definition aggressive_double_var (x:nat) : (fun y=>_) x = x := eq_refl.
+Print aggressive_double_var. (* must be [fun y => y] *)
+
+Definition aggressive_double_var' (x y:nat) : (fun z=>_) x y = x + y := eq_refl.
+Print aggressive_double_var'. 
+
+Definition aggressive_const (x y z:nat) : (fun u v w=>_) x 0 y = x := eq_refl.
+Print aggressive_const.
+
+Set Unicoq Debug.
+Definition aggressive_const' (x y z:nat) : (fun u v w : nat =>_) 0 x y = x := eq_refl.
+Print aggressive_const'.
+
+Definition aggressive_const'' (x y z:nat) : (fun u v w=>_) y x 0 = x := eq_refl.
+Print aggressive_const''.
+
+Fixpoint nary_congruence_statement (n : nat)
+         : (forall B, (B -> B -> Prop) -> Prop) -> Prop :=
+  match n with
+  | O => fun k => forall B, k B (fun x1 x2 : B => x1 = x2)
+  | S n' =>
+    let k' A B e (f1 f2 : A -> B) :=
+      forall x1 x2, x1 = x2 -> (e (f1 x1) (f2 x2) : Prop) in
+    fun k => forall A, nary_congruence_statement n' (fun B e => k _ (k' A B e))
+  end.
+
+
+Definition intersec1 :
+  let T : nat -> nat -> nat -> nat := fun x y z=> _ in
+  forall x y z:nat, T x y z = T y y x /\ T x y z = y := fun x y z:nat=>conj eq_refl eq_refl.
+
+Definition intersec2 :
+  let T : nat -> nat -> nat -> nat := fun x y z=> _ in
+  forall x y z:nat, T x x x = T y y y /\ T x y z = 0 := fun x y z:nat=>conj eq_refl eq_refl.
+
+Fail Definition intersec3 :
+  let T : nat -> nat -> nat -> nat := fun x y z=> _ in
+  forall x y z:nat, T x y z = T y y x /\ T x y z = x := fun x y z:nat=>conj eq_refl eq_refl.
+
+Fail Definition intersec3 :
+  let T : nat -> nat -> nat -> nat := fun x y z=> _ in
+  forall x y z:nat, T x y z = T y y x /\ T x y z = x := fun x y z:nat=>conj eq_refl eq_refl.
+
+Definition intersec3 :
+  let T : nat -> nat -> nat -> nat := fun x y z=> _ in
+  forall x y z:nat, T x y z = T x z z /\ T x y z = x := fun x y z:nat=>conj eq_refl eq_refl.
+
+Definition intersec4 :
+  let T : nat -> nat -> nat -> nat := fun x y z=> _ in
+  forall x y z:nat, T z y z = T z z z /\ T x y z = z := fun x y z:nat=>conj eq_refl eq_refl.
+
+Fail Definition intersec5 :
+  let T : nat -> nat -> nat -> nat := fun x y z=> _ in
+  forall x y z:nat, T x y z = T x z z /\ T x y z = y := fun x y z:nat=>conj eq_refl eq_refl.
+
 Print Unicoq Stats.
-(* Local Variables: *)
-(* coq-prog-name: "coqtop.byte" *)
-(* coq-load-path: nil *)
-(* End: *)
