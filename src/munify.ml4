@@ -72,17 +72,17 @@ module Logger = struct
     output_string stdout ")"
   
   let newNode print v l =
+    if print then
+      begin
+        pad (depth l);
+        print_node v;
+        output_string stdout "\n";
+      end;
     let n = ref (Node (v, l, true, [])) in
     match !l with
     | Initial -> n
-    | Node (v, p, s, c) -> 
-      if print then
-        begin
-          pad (depth l);
-          print_node v;
-          output_string stdout "\n";
-        end;
-      l := Node (v, p, s, (n::c));
+    | Node (v', p, s, c) -> 
+      l := Node (v', p, s, (n::c));
       n
       
   let report b l =
