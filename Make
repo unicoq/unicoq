@@ -3,6 +3,8 @@
 
 COQDOC = "$(COQBIN)coqdoc -interpolate -utf8"
 CAMLP4OPTIONS = "-loc loc"
+src/logger.mli
+src/logger.ml
 src/munify.ml4
 src/munify.mllib
 theories/Unicoq.v

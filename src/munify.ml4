@@ -18,136 +18,6 @@
 DECLARE PLUGIN "munify"
 
 (* $$ *)
-
-(* This should go in its own file, but couldn't figure out
-   how to make ocaml to make it part of the plugin :( *)
-module Logger = struct
-
-  type 'a nlog =
-    Initial
-    | Node of 'a * 'a nlog ref * bool * ('a nlog ref) list
-
-  type 'a log = 'a nlog ref
-
-  let state l =
-    match !l with
-      Initial -> true
-    | Node (_, _, s, _) -> s
-
-  let children l =
-    match !l with
-      Initial -> []
-    | Node (_, _, _, c) -> c
-
-  let value l =
-    match !l with
-      Initial -> []
-    | Node (v, _, _, _) -> v
-
-  let parent l =
-    match !l with
-      Initial -> l
-    | Node (_, p, _, _) -> p
-
-  let init = ref Initial
-
-  let is_init l = match !l with Initial -> true | _ -> false
-
-  let currentNode l = !l
-
-  let rec pad l = 
-    if l <= 0 then () else (Printf.printf "_"; pad (l-1))
-
-  let rec depth l =
-    match !l with
-    | Initial -> 0
-    | Node (_, p, _, _) -> depth p + 1
-
-  let print_node (s, (conv_t, c1, c2)) =
-    output_string stdout c1;
-    output_string stdout (if conv_t = Reduction.CONV then " =?= " else " =<= ");
-    output_string stdout c2;
-    output_string stdout " (";
-    output_string stdout s;
-    output_string stdout ")"
-  
-  let newNode print v l =
-    if print then
-      begin
-        pad (depth l);
-        print_node v;
-        output_string stdout "\n";
-      end;
-    let n = ref (Node (v, l, true, [])) in
-    match !l with
-    | Initial -> n
-    | Node (v', p, s, c) -> 
-      l := Node (v', p, s, (n::c));
-      n
-      
-  let report b l =
-    match !l with
-    | Initial -> l
-    | Node (v, p, _, c) ->
-      l := Node (v, p, b, c);
-      if is_init p then l else p
-
-  let reportSuccess = report true
-
-  let reportErr = report false
-
-  let rec to_parent l =
-    match !(parent l) with
-    | Initial -> l
-    | Node (_, p, _, _) -> to_parent (parent l)
-
-  let rec print_to_stdout i l =
-    match !l with
-    | Initial -> ()
-    | Node (n, _, st, ls) ->
-      pad i;
-      print_node n;
-      if st then
-        output_string stdout " OK\n"
-      else
-        output_string stdout " ERR\n";
-      List.iter (print_to_stdout (i+1)) (List.rev ls)
-
-  let print_to_stdout l = print_to_stdout 0 (to_parent l)
-
-  let print_latex s p l =
-    let f = open_out_gen [Open_append; Open_creat] 0o666 s in
-    let rec dump l =
-      match !l with
-      | Initial -> ()
-      | Node ((s, n), _, true, ls) ->
-        output_string f "\fbox{$\inferrule*[left=";
-        output_string f s;
-        output_string f "]{";
-        List.iter (fun l -> dump l; output_string f "\\\\ ") 
-          (List.rev ls);
-        output_string f "}{";
-        p f n;
-        output_string f "}$}\n"
-      | _ -> ()
-    in
-    output_string f "\\begin{mathpar}\n";
-    dump l;
-    output_string f "\\end{mathpar}\n\n";
-    flush f;
-    close_out f
-
-  let print_latex s p l =
-    if s = "" then
-      Printf.printf "Warning: no LaTex file set with [Set Unicoq LaTex File 'file']. No LaTex output will be generated.\n"
-    else
-      try
-        print_latex s p (to_parent l)
-      with Sys_error p -> Printf.printf "Logger error: '%s'\n" p
-  
-end
-
-
 open Pp
 open Term
 open Names
@@ -320,9 +190,9 @@ let instantiate_evar sign c args =
   if inst = [] then c else replace_vars inst c
 (** Not in 8.5 *)
 
-type 'a unif = 
-    Success of 'a Logger.log * Evd.evar_map 
-  | Err of 'a Logger.log
+type unif = 
+    Success of Logger.log * Evd.evar_map 
+  | Err of Logger.log
 
 let success (l,v) = 
   let l = Logger.reportSuccess l in
@@ -865,7 +735,7 @@ let switch dir f t u = if dir == Original then f t u else f u t
 
 
 (* pre: c and c' are in whdnf with our definition of whd *)
-let rec unify' ?(conv_t=Reduction.CONV) ts env (c, l) (c', l') (dbg, sigma0) : 'a unif =
+let rec unify' ?(conv_t=Reduction.CONV) ts env (c, l) (c', l') (dbg, sigma0) =
   let (c, l1) = decompose_app (Evarutil.whd_head_evar sigma0 c) in
   let (c', l2) = decompose_app (Evarutil.whd_head_evar sigma0 c') in
   let l, l' = l1 @ l, l2 @ l' in
@@ -938,17 +808,17 @@ let rec unify' ?(conv_t=Reduction.CONV) ts env (c, l) (c', l') (dbg, sigma0) : '
     else ();
     res
 
-and unify_constr ?(conv_t=Reduction.CONV) ts env t t' : 'b -> 'a unif =
+and unify_constr ?(conv_t=Reduction.CONV) ts env t t' =
   unify' ~conv_t ts env (decompose_app t) (decompose_app t')
 
-and run_and_unify dbg ts env sigma0 args ty : 'a unif =
+and run_and_unify dbg ts env sigma0 args ty =
   let a, f, v = List.nth args 0, List.nth args 1, List.nth args 2 in
     unify' ~conv_t:Reduction.CUMUL ts env (decompose_app a) ty (dbg, sigma0) &&= fun (dbg, sigma1) ->
       match !run_function env sigma1 f with
       | Some (sigma2, v') -> unify' ts env (decompose_app v) (decompose_app v') (dbg, sigma2)
       | _ -> Err dbg
 
-and try_solve_simple_eqn ?(dir=Original) ts conv_t env evsubs args t sigma dbg : 'a unif =
+and try_solve_simple_eqn ?(dir=Original) ts conv_t env evsubs args t sigma dbg =
   if get_solving_eqn () then 
     try
       let t = Evarsolve.solve_pattern_eqn env args (applist t) in
