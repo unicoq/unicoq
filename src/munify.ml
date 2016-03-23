@@ -4,20 +4,6 @@
 (*                    Matthieu Sozeau <mattam@mattam.org>. *)
 (***********************************************************)
 
-(** Unicoq - An improved unification algorithm for Coq
-
-    This defines a tactic [munify x y] that unifies two typable terms.
-*)
-
-(* These are necessary for grammar extensions like the one at the end 
-   of the module *)
-
-(*i camlp4deps: "parsing/grammar.cma" i*)
-(*i camlp4use: "pa_extend.cmo" i*)
-
-DECLARE PLUGIN "munify"
-
-(* $$ *)
 open Pp
 open Term
 open Names
@@ -28,8 +14,11 @@ open Vars
 open Context
 open Errors
 open Recordops
+open Big_int
 
 (** {2 Options for unification} *)
+
+(** {3 Enabling Unicoq (implementation at the end) *)
 let munify_on = ref false
 
 (** {3 Debugging} *)
@@ -134,17 +123,25 @@ let _ = Goptions.declare_bool_option {
 }
 
 (** {2 Stats} *)
-(** We log all the unification problems and the evar instantiations. *)
-let stat_unif_problems = ref Big_int.zero_big_int
-let stat_minst = ref Big_int.zero_big_int
+(** We log all the calls to unification and the evar
+    instantiations. *)
+type my_stats = {
+  mutable unif_problems : big_int;
+  mutable instantiations : big_int
+}
 
-VERNAC COMMAND EXTEND PrintMunifyStats CLASSIFIED AS SIDEFF
-  | [ "Print" "Unicoq" "Stats" ] -> [
-    Printf.printf "STATS:\t%s\t\t%s\n" 
-      (Big_int.string_of_big_int !stat_unif_problems) 
-      (Big_int.string_of_big_int !stat_minst)
-  ]
-END
+let dstats = { unif_problems = zero_big_int;
+               instantiations = zero_big_int }
+
+type stats = {
+  unif_problems : big_int;
+  instantiations : big_int
+}
+
+let get_stats () = {
+  unif_problems = dstats.unif_problems;
+  instantiations = dstats.instantiations
+}
 
 (** {2 Functions borrowed from Coq 8.4 not found in 8.5} *)
 (* Note: let-in contributes to the instance *)
@@ -230,8 +227,8 @@ let return x = Some x
 
 let latexify s =
   let s = Str.global_replace (Str.regexp "\\\\") "\\\\\\\\" s in
-  let s = Str.global_replace (Str.regexp "{") "\{" s in
-  let s = Str.global_replace (Str.regexp "}") "\}" s in
+  let s = Str.global_replace (Str.regexp "{") "\\{" s in
+  let s = Str.global_replace (Str.regexp "}") "\\}" s in
   let s = Str.global_replace (Str.regexp "%") "\\%" s in
   let s = Str.global_replace (Str.regexp "#") "\\#" s in
   let s = Str.global_replace (Str.regexp "__:=") "" s in (* remove useless names in evar subs *)
@@ -630,8 +627,8 @@ let debug_eq sigma env t c1 c2 l =
 let print_eq f (conv_t, c1, c2) = 
   output_string f "\\lstinline{";
   output_string f c1;
-  output_string f "}~\approx_{";
-  output_string f (if conv_t == Reduction.CONV then "=" else "\leq");
+  output_string f "}~\\approx_{";
+  output_string f (if conv_t == Reduction.CONV then "=" else "\\leq");
   output_string f "}~\\lstinline{";
   output_string f c2;
   output_string f "}"
@@ -826,7 +823,7 @@ and one_is_meta dbg ts conv_t env sigma0 (c, l as t) (c', l' as t') =
           | Success (dbg, sigma) -> dbg, sigma
           | Err dbg -> dbg, sigma0
         in
-        log_eq_spine env (if b then "Meta-Same" else "Meta-Same-Same") conv_t t t' (dbg, sigma) &&= fun dbg, sigma ->
+        log_eq_spine env (if b then "Meta-Same" else "Meta-Same-Same") conv_t t t' (dbg, sigma) &&= fun (dbg, sigma) ->
         if is_success p then
           report (ise_list2 (unify_constr ts env) l l' (dbg, sigma))
         else
@@ -1140,7 +1137,7 @@ and instantiate' ts dir conv_t env (ev, subs as uv) args (h, args') (dbg, sigma0
 	    if Termops.occur_meta t' || Termops.occur_evar ev t' then 
 	      Err dbg
 	    else
-	      (stat_minst := Big_int.succ_big_int !stat_minst;
+	      (dstats.instantiations <- succ_big_int dstats.instantiations;
 	       Success (dbg, Evd.define ev t' sigma2))
 	in
 	  Some p
@@ -1291,7 +1288,7 @@ and unify_evar_conv ts env sigma0 conv_t t t' =
     match !log with 
     | Logger.Node (("Reduce-Same", _), _, true, _) -> false
     | _ -> true in
-  stat_unif_problems := Big_int.succ_big_int !stat_unif_problems;
+  dstats.unif_problems <- succ_big_int dstats.unif_problems;
   Hashtbl.clear tbl;
   match unify_constr ~conv_t:conv_t ts env t t' (Logger.init, sigma0) with
   | Success (log, sigma') -> 
@@ -1319,29 +1316,3 @@ let _ = Goptions.declare_bool_option {
   Goptions.optread = use_munify;
   Goptions.optwrite = set_use_munify;
 }
-
-(* Now the real tactic. *)
-
-open Proofview
-open Notations
-
-let munify_tac gl x y =
-  let env = Goal.env gl in
-  let sigma = Goal.sigma gl in
-  let evars evm = V82.tactic (Refiner.tclEVARS evm) in
-  let res = unify_constr (Conv_oracle.get_transp_state (Environ.oracle env)) env x y (Logger.init, sigma) in
-    match res with
-    | Success (log, evm) -> evars evm
-    | Err _ -> Tacticals.New.tclFAIL 0 (str"Unification failed")
-
-(* This adds an entry to the grammar of tactics, similar to what
-   Tactic Notation does. *)
-
-TACTIC EXTEND munify_tac
-| ["munify" constr(c) constr(c') ] ->
-  [ Proofview.Goal.enter begin fun gl ->
-    let gl = Proofview.Goal.assume gl in
-      munify_tac gl c c'
-  end
-    ]
-END
