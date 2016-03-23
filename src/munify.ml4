@@ -27,47 +27,13 @@ open Globnames
 open Vars
 open Context
 open Errors
-
-(* Getting constrs (primitive Coq terms) from exisiting Coq libraries. *)
-
-let find_constant contrib dir s =
-  constr_of_global (Coqlib.find_reference contrib dir s)
-
-let contrib_name = "unicoq"
-let init_constant dir s = find_constant contrib_name dir s
-
-let constructors_path = ["Unicoq"]
-
-(* (\* We use lazy as the Coq library is not yet loaded when we *)
-(*    initialize the plugin, once [Constructors.Dynamic] is loaded  *)
-(*    in the interpreter this will resolve correctly. *\) *)
-
-(* let coq_dynamic_ind = lazy (init_constant constructors_path "dyn") *)
-(* let coq_dynamic_constr = lazy (init_constant constructors_path "mkDyn") *)
-(* let coq_dynamic_type = lazy (init_constant constructors_path "dyn_type") *)
-(* let coq_dynamic_obj = lazy (init_constant constructors_path "dyn_value") *)
-
-(* (\* Reflect the constructor of [dyn] values *\) *)
-
-(* let mkDyn ty value =  *)
-(*   mkApp (Lazy.force coq_dynamic_constr, [| ty ; value |]) *)
-
-(* We also need lists from the standard library. *)
-
-let list_path = ["Coq";"Init";"Datatypes"]
-let coq_list_ind = lazy (init_constant list_path "list")
-let coq_list_nil = lazy (init_constant list_path "nil")
-let coq_list_cons = lazy (init_constant list_path "cons")
-
-open Term
 open Recordops
 
-let debug = ref false
+(** {2 Options for unification} *)
 let munify_on = ref false
-let aggressive = ref true
-let super_aggressive = ref false
-let hash = ref false
-let try_solving_eqn = ref false
+
+(** {3 Debugging} *)
+let debug = ref false
 
 let set_debug b = 
   debug := b;
@@ -79,20 +45,6 @@ let set_debug b =
     end
       
 let get_debug () = !debug
-
-let is_aggressive () = !aggressive
-let set_aggressive b = aggressive := b
-
-let is_super_aggressive () = !super_aggressive
-let set_super_aggressive b = 
-  if b then (aggressive := b; super_aggressive := b)
-  else super_aggressive := b
-
-let set_hash b = hash := b
-let use_hash () = !hash
-
-let set_solving_eqn b = try_solving_eqn := b
-let get_solving_eqn () = !try_solving_eqn
 
 let _ = Goptions.declare_bool_option {
   Goptions.optsync  = true;
@@ -112,6 +64,27 @@ let _ = Goptions.declare_bool_option {
   Goptions.optread  = (fun () -> !trace);
   Goptions.optwrite = (fun b -> trace := b);
 }
+
+let latex_file = ref ""
+let _ = Goptions.declare_string_option {
+  Goptions.optsync = true;
+  Goptions.optdepr = false;
+  Goptions.optname = "Outputs the successful unification tree in this latex file, if distinct from nil";
+  Goptions.optkey = ["Unicoq";"LaTex";"File"];
+  Goptions.optread = (fun () -> !latex_file);
+  Goptions.optwrite = (fun s-> latex_file := s);
+}
+
+(** {3 Rule switches for the algorithm} *)
+let aggressive = ref true
+let is_aggressive () = !aggressive
+let set_aggressive b = aggressive := b
+
+let super_aggressive = ref false
+let is_super_aggressive () = !super_aggressive
+let set_super_aggressive b = 
+  if b then (aggressive := b; super_aggressive := b)
+  else super_aggressive := b
 
 let _ = Goptions.declare_bool_option {
   Goptions.optsync = true; 
@@ -133,14 +106,9 @@ let _ = Goptions.declare_bool_option {
   Goptions.optwrite = set_super_aggressive;
 }
 
-let _ = Goptions.declare_bool_option {
-  Goptions.optsync = true; 
-  Goptions.optdepr = false;
-  Goptions.optname = "Use a hash table of failures";
-  Goptions.optkey = ["Unicoq"; "Use";"Hash"];
-  Goptions.optread = use_hash;
-  Goptions.optwrite = set_hash;
-}
+let try_solving_eqn = ref false
+let set_solving_eqn b = try_solving_eqn := b
+let get_solving_eqn () = !try_solving_eqn
 
 let _ = Goptions.declare_bool_option {
   Goptions.optsync  = true;
@@ -151,18 +119,22 @@ let _ = Goptions.declare_bool_option {
   Goptions.optwrite = set_solving_eqn 
 }
 
-let latex_file = ref ""
+(** {3 Hashing of failed unifications} *)
+let hash = ref false
+let set_hash b = hash := b
+let use_hash () = !hash
 
-let _ = Goptions.declare_string_option {
-  Goptions.optsync = true;
+let _ = Goptions.declare_bool_option {
+  Goptions.optsync = true; 
   Goptions.optdepr = false;
-  Goptions.optname = "Enable use of new unification algorithm";
-  Goptions.optkey = ["Unicoq";"LaTex";"File"];
-  Goptions.optread = (fun () -> !latex_file);
-  Goptions.optwrite = (fun s-> latex_file := s);
+  Goptions.optname = "Use a hash table of failures";
+  Goptions.optkey = ["Unicoq"; "Use";"Hash"];
+  Goptions.optread = use_hash;
+  Goptions.optwrite = set_hash;
 }
 
-
+(** {2 Stats} *)
+(** We log all the unification problems and the evar instantiations. *)
 let stat_unif_problems = ref Big_int.zero_big_int
 let stat_minst = ref Big_int.zero_big_int
 
@@ -174,7 +146,7 @@ VERNAC COMMAND EXTEND PrintMunifyStats CLASSIFIED AS SIDEFF
   ]
 END
 
-(** Not in 8.5 *)
+(** {2 Functions borrowed from Coq 8.4 not found in 8.5} *)
 (* Note: let-in contributes to the instance *)
 let make_evar_instance sign args =
   let rec instrec = function
@@ -190,40 +162,70 @@ let instantiate_evar sign c args =
   if inst = [] then c else replace_vars inst c
 (** Not in 8.5 *)
 
+
+(** The type of returned values by the algorithm. *)
 type unif = 
     Success of Logger.log * Evd.evar_map 
   | Err of Logger.log
 
+(** Returns Success after logging it. *)
 let success (l,v) = 
   let l = Logger.reportSuccess l in
   Success (l,v)
 
+(** Returns Err after logging it. *)
 let err l = 
   let l = Logger.reportErr l in
   Err l
 
+(** Logs a success or an error according to s. *)
 let report s =
   match s with 
   | Success (l, v) -> success (l, v)
   | Err l -> err l
 
+let is_success s = match s with Success _ -> true | _ -> false
+
+(** Monadic style operations for the unif type. *)
+let (&&=) opt f = 
+  match opt with
+  | Success (l, x) -> f (l, x)
+  | _ -> opt
+    
+let (||=) opt f = 
+  match opt with
+  | Err l -> f l
+  | _ -> opt
+
+let ise_list2 f l1 l2 =
+  let rec ise_list2 l1 l2 (l, evd) =
+    match l1,l2 with
+      [], [] -> Success (l, evd)
+    | x::l1, y::l2 ->
+      f x y (l, evd) &&= ise_list2 l1 l2
+    | _ -> Err l in
+  ise_list2 l1 l2
+
+let ise_array2 f v1 v2 evd =
+  let l1 = Array.length v1 in
+  let l2 = Array.length v2 in
+  assert (l1 <= l2) ;
+  let diff = l2 - l1 in
+  let rec allrec n (l, evdi) = 
+    if n >= l1 then Success (l, evdi)
+    else
+      f v1.(n) v2.(n+diff) (l, evdi) &&=
+      allrec (n+1)
+  in
+  allrec 0 evd
+
+(** Standard monadic operations over option types. *)
 let (>>=) opt f = 
   match opt with
   | Some(x) -> f x
   | None -> None
    
 let return x = Some x
-
-let (&&=) opt f = 
-  match opt with
-  | Success (l, x) -> f (l, x)
-  | _ -> opt
-    
-
-let (||=) opt f = 
-  match opt with
-  | Err l -> f l
-  | _ -> opt
 
 
 let latexify s =
@@ -250,30 +252,6 @@ let log_eq_spine env rule conv_t t1 t2 =
   log_eq env rule conv_t (applist t1) (applist t2)
 
 
-let is_success s = match s with Success _ -> true | _ -> false
-
-
-let ise_list2 f l1 l2 =
-  let rec ise_list2 l1 l2 (l, evd) =
-    match l1,l2 with
-      [], [] -> Success (l, evd)
-    | x::l1, y::l2 ->
-      f x y (l, evd) &&= ise_list2 l1 l2
-    | _ -> Err l in
-  ise_list2 l1 l2
-
-let ise_array2 f v1 v2 evd =
-  let l1 = Array.length v1 in
-  let l2 = Array.length v2 in
-  assert (l1 <= l2) ;
-  let diff = l2 - l1 in
-  let rec allrec n (l, evdi) = 
-    if n >= l1 then Success (l, evdi)
-    else
-      f v1.(n) v2.(n+diff) (l, evdi) &&=
-      allrec (n+1)
-  in
-  allrec 0 evd
 
 
 let id_substitution nc = 
@@ -365,11 +343,6 @@ let try_unfolding ts env t =
     get_definition env t
   else
     t
-
-
-let (-.) n m =
-  if n > m then n - m
-  else 0
 
 (* pre: |ctx| = |subs| and subs and args are both a list of vars or rels.
    ctx is the (named) context of the evar
