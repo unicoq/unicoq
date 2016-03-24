@@ -4,6 +4,6 @@
 (*                    Matthieu Sozeau <mattam@mattam.org>.                                      *)
 (************************************************************************************************)
 
-Declare ML Module "munify".
+Declare ML Module "unicoq".
 
 Global Set Use Unicoq.

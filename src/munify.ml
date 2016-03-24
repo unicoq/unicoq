@@ -18,6 +18,7 @@ open Big_int
 
 module RO = Reductionops
 module R = Reduction
+module EU = Evarutil
 
 (** {2 Options for unification} *)
 
@@ -290,9 +291,9 @@ let debug_str s l =
     ()
 
 let debug_eq sigma env t c1 c2 l =
-  Pp.msg (Termops.print_constr_env env (Evarutil.nf_evar sigma (applist c1)));
+  Pp.msg (Termops.print_constr_env env (EU.nf_evar sigma (applist c1)));
   Printf.printf "%s" (if t == R.CONV then " =?= " else " <?= ");
-  Pp.msg (Termops.print_constr_env env (Evarutil.nf_evar sigma (applist c2)));
+  Pp.msg (Termops.print_constr_env env (EU.nf_evar sigma (applist c2)));
   Printf.printf "\n"
 
 let print_eq f (conv_t, c1, c2) =
@@ -452,7 +453,7 @@ let invert map sigma ctx t subs args ev' =
   let in_subs j = j < List.length ctx in
   let rmap = ref map in
   let rec invert' inside_evar t i =
-    let t = Evarutil.whd_head_evar sigma t in
+    let t = EU.whd_head_evar sigma t in
     match kind_of_term t with
       | Var id -> 
 	find_unique_var id sargs >>= fun j -> 
@@ -561,7 +562,7 @@ let rec prune evd (ev, plist) =
     | Some (m, concl) ->
       let evd = prune_all m evd in
       let concl = RO.nf_evar evd (Evd.evar_concl evi) in
-      let evd', ev' = Evarutil.new_evar_instance env_val' evd 
+      let evd', ev' = EU.new_evar_instance env_val' evd 
 	concl id_env' in
       Evd.define ev ev' evd'
 
@@ -694,8 +695,8 @@ let specialize_evar env sigma (ev, subs) args =
   match args with
   | [] -> raise CannotPrune
   | hd :: tl ->
-    let sigma', lam = Evarutil.define_evar_as_lambda env sigma (ev, subs) in
-    let (n, dom, codom) = destLambda (Evarutil.nf_evar sigma' lam) in
+    let sigma', lam = EU.define_evar_as_lambda env sigma (ev, subs) in
+    let (n, dom, codom) = destLambda (EU.nf_evar sigma' lam) in
       sigma', subst1 hd codom, tl
 
 exception InternalException
@@ -715,77 +716,84 @@ let tbl = Hashtbl.create 1000
 
 let tblfind t x = try Hashtbl.find t x with Not_found -> false
 
-let rec unify' ?(conv_t=R.CONV) ts env (c, l) (c', l') (dbg, sigma0) =
+let ground_spine sigma (h, args) =
+  EU.is_ground_term sigma h && List.for_all (EU.is_ground_term sigma) args
+
+let try_conv conv_t ts env (c1, l1 as sp1) (c2, l2 as sp2) (dbg, sigma0) =
+  if ground_spine sigma0 sp1 && ground_spine sigma0 sp2 then
+    let app1 = applist sp1 and app2 = applist sp2 in
+    try
+      begin
+        let (sigma1, b) = RO.infer_conv ~pb:conv_t ~ts env sigma0 app1 app2 in
+        if b then
+          report (log_eq_spine env "Reduce-Same" conv_t sp1 sp2 (dbg, sigma1))
+        else Err dbg
+      end
+    with Univ.UniverseInconsistency _ -> Err dbg
+  else Err dbg
+
+let try_hash env sp1 sp2 (dbg, sigma as dsigma) =
+  if use_hash () && tblfind tbl (sigma, env, sp1, sp2) then begin
+    log_eq_spine env "Hash-Hit" R.CONV sp1 sp2 dsigma &&= fun (dbg, _) ->
+      report (Err dbg)
+  end
+  else
+    Success (dbg, sigma)
+
+(** {3 "The Function" is split into several} *)
+let rec unify' ?(conv_t=R.CONV) ts env (c, l) (c', l') (dbg, sigma0 as dsigma) =
   let (c, l1) = decompose_app (Evarutil.whd_head_evar sigma0 c) in
   let (c', l2) = decompose_app (Evarutil.whd_head_evar sigma0 c') in
   let l, l' = l1 @ l, l2 @ l' in
   let t, t' = (c, l), (c', l') in
+  try_conv conv_t ts env t t' dsigma ||= fun dbg ->
+    try_hash env t t' dsigma &&= fun (dbg, sigma0) ->
     let res =
-      let sigma1, b = 
-	let appt = applist t and appt' = applist t' in
-	let ground =
-	  Evarutil.(is_ground_term sigma0 appt && is_ground_term sigma0 appt')
-	in 
-	  if ground then 
-	    try RO.infer_conv ~pb:conv_t ~ts env sigma0 appt appt'
-	    with Univ.UniverseInconsistency _ -> sigma0, false
-	  else sigma0, false
-      in
-      if b then
-        report (log_eq_spine env "Reduce-Same" conv_t t t' (dbg, sigma1))
-      else if use_hash () && tblfind tbl (sigma0, env, (c,l),(c',l')) then begin
-        log_eq_spine env "Hash-Hit" conv_t t t' (dbg, sigma0) &&= fun (dbg, _) ->
-	  report (Err dbg)
-      end 
-      else begin
-	    match (kind_of_term c, kind_of_term c') with
-	    | Evar _, _ 
-	    | _, Evar _ ->
-	      one_is_meta dbg ts conv_t env sigma0 t t'
-
-	    | _, _  ->
-	      (
-		if (isConst c || isConst c') && not (eq_constr c c') then
-		  begin
-		    if is_lift c && List.length l = 3 then
-		      run_and_unify dbg ts env sigma0 l t'
-		    else if is_lift c' && List.length l' = 3 then
-		      run_and_unify dbg ts env sigma0 l' t
-		    else
-		      Err dbg
-		  end
-		else
-		  Err dbg
-	      ) ||= fun dbg ->
-		(
-		  if (isConst c || isConst c') && not (eq_constr c c') then
-		    try conv_record dbg ts env sigma0 t t'
-		    with ProjectionNotFound ->
-		      try conv_record dbg ts env sigma0 t' t
-		      with ProjectionNotFound -> Err dbg
-		  else
-		    Err dbg
-		) ||= fun dbg ->
-		  (
-		    let n = List.length l in
-		    let m = List.length l' in
-		      if n = m then 
-			begin report (
-       log_eq_spine env "App-FO" conv_t t t' (dbg, sigma0) &&=
-       compare_heads conv_t ts env c c' &&=
-       ise_list2 (unify_constr ts env) l l' 
-     ) end
-		      else
-			Err dbg
-		  ) ||= fun dbg ->
-		    (
-		      try_step dbg conv_t ts env sigma0 t t'
-		    ) 
-	  end
+      begin
+        if isEvar c || isEvar c' then
+          one_is_meta dbg ts conv_t env sigma0 t t'
+        else
+          (
+            if (isConst c || isConst c') && not (eq_constr c c') then
+              begin
+                if is_lift c && List.length l = 3 then
+	          run_and_unify dbg ts env sigma0 l t'
+                else if is_lift c' && List.length l' = 3 then
+	          run_and_unify dbg ts env sigma0 l' t
+                else
+	          Err dbg
+              end
+            else
+              Err dbg
+          ) ||= fun dbg ->
+            (
+              if (isConst c || isConst c') && not (eq_constr c c') then
+                try conv_record dbg ts env sigma0 t t'
+                with ProjectionNotFound ->
+                try conv_record dbg ts env sigma0 t' t
+                with ProjectionNotFound -> Err dbg
+              else
+                Err dbg
+            ) ||= fun dbg ->
+              (
+                let n = List.length l in
+                let m = List.length l' in
+                if n = m then 
+	          begin report (
+               log_eq_spine env "App-FO" conv_t t t' (dbg, sigma0) &&=
+               compare_heads conv_t ts env c c' &&=
+               ise_list2 (unify_constr ts env) l l' 
+             ) end
+                else
+	          Err dbg
+              ) ||= fun dbg ->
+                (
+	          try_step dbg conv_t ts env sigma0 t t'
+                ) 
+      end
     in
     if not (is_success res) && use_hash () then
-      Hashtbl.add tbl (sigma0, env, (c, l), (c',l')) true 
-    else ();
+      Hashtbl.add tbl (sigma0, env, t, t') true;
     res
 
 and unify_constr ?(conv_t=R.CONV) ts env t t' =

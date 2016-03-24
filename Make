@@ -7,7 +7,7 @@ src/logger.mli
 src/logger.ml
 src/munify.mli
 src/munify.ml
-src/tactics.ml4
-src/munify.mllib
+src/unitactics.ml4
+src/unicoq.mllib
 theories/Unicoq.v
 test-suite/munifytest.v

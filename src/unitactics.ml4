@@ -15,7 +15,7 @@
 (*i camlp4deps: "parsing/grammar.cma" i*)
 (*i camlp4use: "pa_extend.cmo" i*)
 
-DECLARE PLUGIN "munify"
+DECLARE PLUGIN "unicoq"
 
 open Pp
 open Proofview
