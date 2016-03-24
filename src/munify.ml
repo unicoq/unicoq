@@ -16,6 +16,9 @@ open Errors
 open Recordops
 open Big_int
 
+module RO = Reductionops
+module R = Reduction
+
 (** {2 Options for unification} *)
 
 (** {3 Enabling Unicoq (implementation at the end) *)
@@ -122,6 +125,7 @@ let _ = Goptions.declare_bool_option {
   Goptions.optwrite = set_hash;
 }
 
+
 (** {2 Stats} *)
 (** We log all the calls to unification and the evar
     instantiations. *)
@@ -143,7 +147,8 @@ let get_stats () = {
   instantiations = dstats.instantiations
 }
 
-(** {2 Functions borrowed from Coq 8.4 not found in 8.5} *)
+
+(** {2 Functions borrowed from Coq 8.4 and not found in 8.5} *)
 (* Note: let-in contributes to the instance *)
 let make_evar_instance sign args =
   let rec instrec = function
@@ -159,6 +164,41 @@ let instantiate_evar sign c args =
   if inst = [] then c else replace_vars inst c
 (** Not in 8.5 *)
 
+
+(** {2 Generic utility functions} *)
+let array_mem_from_i e i a =
+  let j = ref i in
+  let length = Array.length a in
+  let b = ref false in
+  while !j < length && not !b do
+    if a.(!j) = e then
+      b := true
+    else
+      j := !j+1
+  done;
+  !b
+
+let array_mem_to_i e i a =
+  let j = ref 0 in
+  let b = ref false in
+  while !j < i && not !b do
+    if a.(!j) = e then
+      b := true
+    else
+      j := !j+1
+  done;
+  !b
+
+(** Standard monadic operations over option types. *)
+let (>>=) opt f =
+  match opt with
+  | Some(x) -> f x
+  | None -> None
+
+let return x = Some x
+
+
+(** {2 The return type of unification} *)
 
 (** The type of returned values by the algorithm. *)
 type unif = 
@@ -183,7 +223,7 @@ let report s =
 
 let is_success s = match s with Success _ -> true | _ -> false
 
-(** Monadic style operations for the unif type. *)
+(** {3 Monadic style operations for the unif type} *)
 let (&&=) opt f = 
   match opt with
   | Success (l, x) -> f (l, x)
@@ -216,23 +256,18 @@ let ise_array2 f v1 v2 evd =
   in
   allrec 0 evd
 
-(** Standard monadic operations over option types. *)
-let (>>=) opt f = 
-  match opt with
-  | Some(x) -> f x
-  | None -> None
-   
-let return x = Some x
 
+(** {2 Functions for debugging} *)
 
 let latexify s =
-  let s = Str.global_replace (Str.regexp "\\\\") "\\\\\\\\" s in
-  let s = Str.global_replace (Str.regexp "{") "\\{" s in
-  let s = Str.global_replace (Str.regexp "}") "\\}" s in
-  let s = Str.global_replace (Str.regexp "%") "\\%" s in
-  let s = Str.global_replace (Str.regexp "#") "\\#" s in
-  let s = Str.global_replace (Str.regexp "__:=") "" s in (* remove useless names in evar subs *)
-  Str.global_replace (Str.regexp "~") "\\~" s
+  let open Str in
+  let s = global_replace (regexp "\\\\") "\\\\\\\\" s in
+  let s = global_replace (regexp "{") "\\{" s in
+  let s = global_replace (regexp "}") "\\}" s in
+  let s = global_replace (regexp "%") "\\%" s in
+  let s = global_replace (regexp "#") "\\#" s in
+  let s = global_replace (regexp "__:=") "" s in (* remove useless names in evar subs *)
+  global_replace (Str.regexp "~") "\\~" s
   
 let log_eq env rule conv_t t1 t2 (l, sigma) = 
   if not (get_debug () || !trace) then
@@ -248,17 +283,52 @@ let log_eq env rule conv_t t1 t2 (l, sigma) =
 let log_eq_spine env rule conv_t t1 t2 = 
   log_eq env rule conv_t (applist t1) (applist t2)
 
+let debug_str s l =
+  if !debug then
+    Printf.printf "%s\n" s
+  else
+    ()
+
+let debug_eq sigma env t c1 c2 l =
+  Pp.msg (Termops.print_constr_env env (Evarutil.nf_evar sigma (applist c1)));
+  Printf.printf "%s" (if t == R.CONV then " =?= " else " <?= ");
+  Pp.msg (Termops.print_constr_env env (Evarutil.nf_evar sigma (applist c2)));
+  Printf.printf "\n"
+
+let print_eq f (conv_t, c1, c2) =
+  output_string f "\\lstinline{";
+  output_string f c1;
+  output_string f "}~\\approx_{";
+  output_string f (if conv_t == R.CONV then "=" else "\\leq");
+  output_string f "}~\\lstinline{";
+  output_string f c2;
+  output_string f "}"
 
 
+(** {2 Run function for executing arbitrary code given a certain constr} *)
+(** This is used in Beta's thesis, although it isn't fully studied.
+    We leave it for now, but it might get GC at some point. *)
+let run_function = ref (fun _ _ _ -> None)
+let set_run f = run_function := f
 
+let lift_constr = ref (lazy mkProp)
+let set_lift_constr c = lift_constr := c
+
+let is_lift c =
+  try eq_constr c (Lazy.force !lift_constr)
+  with Not_found -> false
+
+
+(** {2 Utilities for constrs} *)
+
+(** Given a named_context returns a list with its variables *)
 let id_substitution nc = 
-  let s = fold_named_context (fun (n,_,_) s -> mkVar n :: s) nc ~init:[] in
-  Array.of_list s
+  fold_named_context (fun (n,_,_) s -> mkVar n :: s) nc ~init:[]
 
-(* pre: isVar v1 *)
-let is_same_var v1 v2 =  isVar v2 && (destVar v1 = destVar v2)
+(** Pre: isVar v1 *)
+let is_same_var v1 v2 = isVar v2 && (destVar v1 = destVar v2)
 
-(* pre: isRel v1 *)
+(** Pre: isRel v1 *)
 let is_same_rel v1 v2 = isRel v2 && destRel v1 = destRel v2
 
 let is_same_evar i1 ev2 =
@@ -272,6 +342,8 @@ let is_variable_subs = CArray.for_all (fun c -> isVar c || isRel c)
 
 let is_variable_args = List.for_all (fun c -> isVar c || isRel c)    
 
+(** find_unique finds a unique j such that List.nth j s = id. See use
+    below to understand test and dest. *)
 exception NotUnique
 let find_unique test dest id s =
   let (i, j) = List.fold_right (fun c (i, j) -> 
@@ -287,7 +359,6 @@ let find_unique test dest id s =
 let find_unique_var = find_unique isVar destVar
 
 let find_unique_rel = find_unique isRel destRel
-
 
 let has_definition ts env t = 
   if isVar t then
@@ -312,6 +383,7 @@ let has_definition ts env t =
   else
     false
 
+(** Must have a definition. *)
 let get_definition env t =
   if isVar t then
     let var = destVar t in
@@ -331,6 +403,9 @@ let get_definition env t =
   else
     anomaly (str"get_definition didn't have definition!")
 
+(** Given a defined constant/variable c applied to arguments args it
+    unfolds c and returns the new head term d applied to the concatenation
+    of arguments. *)
 let get_def_app_stack env (c, args) =
   let (d, dargs) = decompose_app (get_definition env c) in
   (d, dargs @ args)
@@ -341,7 +416,7 @@ let try_unfolding ts env t =
   else
     t
 
-(* pre: |ctx| = |subs| and subs and args are both a list of vars or rels.
+(** pre: |ctx| = |subs| and subs and args are both a list of vars or rels.
    ctx is the (named) context of the evar
    t is the term to invert
    subs is the substitution of the evar
@@ -357,7 +432,7 @@ let try_unfolding ts env t =
    - If x appears (uniquely) in args, then x is replaced by Rel j, were
      j is the position of x in args.
    As a side effect, it populates the map with evars that sould be prunned.
-   Prunning is needed to avoid failing when there is hope: the unification 
+   Prunning is needed to avoid failing when there is hope. E.g., the unification 
    problem
      ?e[x] = ?e'[x, z]
    is solvable if we prune z from ?e'.  However, this is not the case in the 
@@ -428,12 +503,14 @@ let invert map sigma ctx t subs args ev' =
   (try invert' false t 0 with NotUnique -> None) >>= fun c' ->
   return (!rmap, c')
 
+(** Collects (named) variables of a term. *)
 let collect_vars =
   let rec aux vars c = match kind_of_term c with
   | Var id -> Names.Idset.add id vars
   | _ -> fold_constr aux vars c in
   aux Names.Idset.empty
 
+(** True if at least one (named) var in tm is in vars. *)
 let free_vars_intersect tm vars = 
   Names.Idset.exists (fun v -> List.mem v vars) (collect_vars tm)
 
@@ -442,23 +519,21 @@ let some_or_prop o =
       None -> mkProp
     | Some tm -> tm
 
-(** removes the positions in the list, and all dependent elements *)
+(** Removes the positions in the list, and all dependent elements. *)
 let remove sigma l pos =
   let l = List.rev l in
   let rec remove' i l vs =
     match l with
       | [] -> []
       | ((x, o, t as p) :: s) -> 
+        (* Is there a way to avoid nf_evar? *)
         if List.mem i pos 
-	  || free_vars_intersect (Reductionops.nf_evar sigma t) vs 
-	  || free_vars_intersect (Reductionops.nf_evar sigma (some_or_prop o)) vs then
+	  || free_vars_intersect (RO.nf_evar sigma t) vs
+	  || free_vars_intersect (RO.nf_evar sigma (some_or_prop o)) vs then
           remove' (i-1) s (x :: vs)
         else
           (p :: remove' (i-1) s vs)
   in List.rev (remove' (List.length l-1) l [])
-
-let free_vars_in tm vars = 
-  Names.Idset.for_all (fun v -> List.mem v vars) (collect_vars tm)
 
 exception CannotPrune
 
@@ -477,14 +552,15 @@ let rec prune evd (ev, plist) =
                     Environ.empty_named_context_val) in
   (* the type of the evar may contain an evar depending on the some of
      the vars that we want to prune, so we need to prune that
-     aswell *)
-  let concl = Reductionops.nf_evar evd (Evd.evar_concl evi) in
-  let id_env' = Array.to_list (id_substitution env') in
+     as well *)
+  (* Is there a way to avoid nf_evar? *)
+  let concl = RO.nf_evar evd (Evd.evar_concl evi) in
+  let id_env' = id_substitution env' in
   match invert Evar.Map.empty evd env' concl id_env' [] ev with
       None -> raise CannotPrune
     | Some (m, concl) ->
       let evd = prune_all m evd in
-      let concl = Reductionops.nf_evar evd (Evd.evar_concl evi) in
+      let concl = RO.nf_evar evd (Evd.evar_concl evi) in
       let evd', ev' = Evarutil.new_evar_instance env_val' evd 
 	concl id_env' in
       Evd.define ev ev' evd'
@@ -492,8 +568,8 @@ let rec prune evd (ev, plist) =
 and prune_all map evd =
   List.fold_left prune evd (Evar.Map.bindings map)
 
-(* pre: |s1| = |s2| 
-   pos: None if s1 or s2 are not equal and not var to var subs
+(** pre: |s1| = |s2|
+    pos: None if s1 or s2 are not equal and not var to var subs
         Some l with l list of indexes where s1 and s2 do not agree *)
 let intersect env sigma s1 s2 =
   let n = Array.length s1 in
@@ -512,7 +588,7 @@ let intersect env sigma s1 s2 =
   assert (Array.length s2 = n) ;
   intsct 0
 
-(* pre: ev is a not-defined evar *)
+(** pre: ev is not defined *)
 let unify_same dbg env sigma ev subs1 subs2 =
   match intersect env sigma subs1 subs2 with
   | Some [] -> (false, Success (dbg, sigma))
@@ -523,12 +599,10 @@ let unify_same dbg env sigma ev subs1 subs2 =
               end
   | _ -> (false, Err dbg)
 
-
-
-(* given a list of arguments [args] = [x1 .. xn], a [body] with free
-   indices [1 .. n], and a substitution [subst] with context [nc] it
-   returns [fun x1 : A1{subst}^-1 => .. => fun xn : An{subst}^-1 =>
-   body], where each [A_i] is the type of [x_i].
+(** given a list of arguments [args] = [x1 .. xn], a [body] with free
+    indices [1 .. n], and a substitution [subst] with context [nc] it
+    returns [fun x1 : A1{subst}^-1 => .. => fun xn : An{subst}^-1 =>
+    body], where each [A_i] is the type of [x_i].
 *)
 let fill_lambdas_invert_types map env sigma nc body subst args ev =
   let rmap = ref map in
@@ -591,91 +665,21 @@ let check_conv_record (t1,l1) (t2,l2) =
   with Failure _ | Not_found ->
     raise ProjectionNotFound
 
-let run_function = ref (fun _ _ _ -> None)
-let set_run f = run_function := f
-
-let lift_constr = ref (lazy mkProp)
-let set_lift_constr c = lift_constr := c
-
-let is_lift c = 
-  try eq_constr c (Lazy.force !lift_constr)
-  with Not_found -> false
-
-
-let rec pad l = if l <= 0 then () else (Printf.printf "_"; pad (l-1))
-
-let print_bar l = if l > 0 then Printf.printf "%s" "|" else ()
-    
-let debug_str s l =
-  if !debug then 
-    begin
-      print_bar l;
-      pad l;
-      Printf.printf "%s\n" s
-    end
-  else
-    ()
-
-let debug_eq sigma env t c1 c2 l = 
-  print_bar l;
-  pad l;
-  Pp.msg (Termops.print_constr_env env (Evarutil.nf_evar sigma (applist c1)));
-  Printf.printf "%s" (if t == Reduction.CONV then " =?= " else " <?= ");
-  Pp.msg (Termops.print_constr_env env (Evarutil.nf_evar sigma (applist c2)));
-  Printf.printf "\n" 
- 
-let print_eq f (conv_t, c1, c2) = 
-  output_string f "\\lstinline{";
-  output_string f c1;
-  output_string f "}~\\approx_{";
-  output_string f (if conv_t == Reduction.CONV then "=" else "\\leq");
-  output_string f "}~\\lstinline{";
-  output_string f c2;
-  output_string f "}"
-
-type stucked = NotStucked | StuckedLeft | StuckedRight
-type direction = Original | Swap
-
 let evar_apprec ts env sigma (c, stack) =
   let rec aux s =
     let ((t,stack),cststack) =
-      Reductionops.(whd_betaiota_deltazeta_for_iota_state 
-        ts env sigma Cst_stack.empty s)
-    in
+      RO.(whd_betaiota_deltazeta_for_iota_state ts env sigma Cst_stack.empty s) in
     match kind_of_term t with
-      | Evar (evk,_ as ev) when Evd.is_defined sigma evk ->
-	  aux (Evd.existential_value sigma ev, stack)
-      | _ -> 
-	match Reductionops.Stack.list_of_app_stack stack with
-	| None -> decompose_app (Reductionops.Stack.zip (t, stack))
-	| Some stack -> (t, stack)
-  in aux (c, Reductionops.Stack.append_app_list stack Reductionops.Stack.empty)
+    | Evar (evk,_ as ev) when Evd.is_defined sigma evk ->
+      aux (Evd.existential_value sigma ev, stack)
+    | _ ->
+      match RO.Stack.list_of_app_stack stack with
+      | None -> decompose_app (RO.Stack.zip (t, stack))
+      | Some stack -> (t, stack)
+  in aux (c, RO.Stack.append_app_list stack RO.Stack.empty)
 
 let eq_app_stack (c, l) (c', l') = 
   Term.eq_constr c c' && List.for_all2 Term.eq_constr l l'
-
-let array_mem_from_i e i a =
-  let j = ref i in
-  let length = Array.length a in
-  let b = ref false in
-  while !j < length && not !b do 
-    if a.(!j) = e then
-      b := true
-    else
-      j := !j+1
-  done;
-  !b
-
-let array_mem_to_i e i a =
-  let j = ref 0 in
-  let b = ref false in
-  while !j < i && not !b do 
-    if a.(!j) = e then
-      b := true
-    else
-      j := !j+1
-  done;
-  !b
 
 let remove_non_var env sigma (ev, subs as evsubs) args =
   let ps = CArray.fold_right_i (fun i a s -> 
@@ -684,8 +688,7 @@ let remove_non_var env sigma (ev, subs as evsubs) args =
   if ps = [] then raise CannotPrune
   else
     let sigma' = prune sigma (ev, ps) in
-    (sigma', Reductionops.nf_evar sigma' (mkEvar evsubs), args)
-
+    (sigma', RO.nf_evar sigma' (mkEvar evsubs), args)
 
 let specialize_evar env sigma (ev, subs) args =
   match args with
@@ -697,15 +700,22 @@ let specialize_evar env sigma (ev, subs) args =
 
 exception InternalException
 
+(** {2 The function} *)
+
+(** Enum type indicating where it is useless to reduce. *)
+type stucked = NotStucked | StuckedLeft | StuckedRight
+
+(** Enum type indicating if the algorithm must swap the lhs and rhs. *)
+type direction = Original | Swap
+
+let switch dir f t u = if dir == Original then f t u else f u t
+
+(** {3 Hashing table of failures} *)
 let tbl = Hashtbl.create 1000
 
 let tblfind t x = try Hashtbl.find t x with Not_found -> false
-  
-let switch dir f t u = if dir == Original then f t u else f u t
 
-
-(* pre: c and c' are in whdnf with our definition of whd *)
-let rec unify' ?(conv_t=Reduction.CONV) ts env (c, l) (c', l') (dbg, sigma0) =
+let rec unify' ?(conv_t=R.CONV) ts env (c, l) (c', l') (dbg, sigma0) =
   let (c, l1) = decompose_app (Evarutil.whd_head_evar sigma0 c) in
   let (c', l2) = decompose_app (Evarutil.whd_head_evar sigma0 c') in
   let l, l' = l1 @ l, l2 @ l' in
@@ -717,7 +727,7 @@ let rec unify' ?(conv_t=Reduction.CONV) ts env (c, l) (c', l') (dbg, sigma0) =
 	  Evarutil.(is_ground_term sigma0 appt && is_ground_term sigma0 appt')
 	in 
 	  if ground then 
-	    try Reductionops.infer_conv ~pb:conv_t ~ts env sigma0 appt appt' 
+	    try RO.infer_conv ~pb:conv_t ~ts env sigma0 appt appt'
 	    with Univ.UniverseInconsistency _ -> sigma0, false
 	  else sigma0, false
       in
@@ -778,12 +788,12 @@ let rec unify' ?(conv_t=Reduction.CONV) ts env (c, l) (c', l') (dbg, sigma0) =
     else ();
     res
 
-and unify_constr ?(conv_t=Reduction.CONV) ts env t t' =
+and unify_constr ?(conv_t=R.CONV) ts env t t' =
   unify' ~conv_t ts env (decompose_app t) (decompose_app t')
 
 and run_and_unify dbg ts env sigma0 args ty =
   let a, f, v = List.nth args 0, List.nth args 1, List.nth args 2 in
-    unify' ~conv_t:Reduction.CUMUL ts env (decompose_app a) ty (dbg, sigma0) &&= fun (dbg, sigma1) ->
+    unify' ~conv_t:R.CUMUL ts env (decompose_app a) ty (dbg, sigma0) &&= fun (dbg, sigma1) ->
       match !run_function env sigma1 f with
       | Some (sigma2, v') -> unify' ts env (decompose_app v) (decompose_app v') (dbg, sigma2)
       | _ -> Err dbg
@@ -793,13 +803,13 @@ and try_solve_simple_eqn ?(dir=Original) ts conv_t env evsubs args t sigma dbg =
     try
       let t = Evarsolve.solve_pattern_eqn env args (applist t) in
       let pbty = match conv_t with 
-	| Reduction.CONV -> None
-	| Reduction.CUMUL -> Some (dir == Original)
+	| R.CONV -> None
+	| R.CUMUL -> Some (dir == Original)
       in
 	match Evarsolve.solve_simple_eqn (unify_evar_conv ts) env sigma (pbty, evsubs, t) with
 	| Evarsolve.Success sigma' ->
 	  Printf.printf "%s" "solve_simple_eqn solved it: ";
-	  debug_eq sigma env Reduction.CONV (mkEvar evsubs, []) (decompose_app t) 0;
+	  debug_eq sigma env R.CONV (mkEvar evsubs, []) (decompose_app t) 0;
 	  Success (dbg, sigma')
 	| Evarsolve.UnifFailure (sigma', error) -> Err dbg
     with _ -> 
@@ -810,9 +820,9 @@ and try_solve_simple_eqn ?(dir=Original) ts conv_t env evsubs args t sigma dbg =
 
 and one_is_meta dbg ts conv_t env sigma0 (c, l as t) (c', l' as t') =
   (* first we instantiate all defined metas *)
-  let nf_map = List.map (fun a->Reductionops.nf_evar sigma0 a) in
-  let (c, l) = (Reductionops.nf_evar sigma0 c, nf_map l) in 
-  let (c', l') = (Reductionops.nf_evar sigma0 c', nf_map l') in
+  let nf_map = List.map (fun a->RO.nf_evar sigma0 a) in
+  let (c, l) = (RO.nf_evar sigma0 c, nf_map l) in
+  let (c', l') = (RO.nf_evar sigma0 c', nf_map l') in
   if isEvar c && isEvar c' then
     let (k1, s1 as e1), (k2, s2 as e2) = destEvar c, destEvar c' in
     if k1 = k2 then
@@ -882,8 +892,8 @@ and compare_heads conv_t ts env c c' (dbg, sigma0) =
     begin
       try
 	let sigma1 = match conv_t with
-	  | Reduction.CONV -> Evd.set_eq_sort env sigma0 s1 s2 
-	  | Reduction.CUMUL -> Evd.set_leq_sort env sigma0 s1 s2
+	  | R.CONV -> Evd.set_eq_sort env sigma0 s1 s2
+	  | R.CUMUL -> Evd.set_leq_sort env sigma0 s1 s2
         in
         report (Success (dbg, sigma1))
       with Univ.UniverseInconsistency e -> 
@@ -1081,7 +1091,7 @@ and remove_equal_tail (h, args) (h', args') =
 and instantiate' ts dir conv_t env (ev, subs as uv) args (h, args') (dbg, sigma0) =
   let args, args' = remove_equal_tail (mkEvar uv, args) (h, args') in
   (* beta-reduce to remove dependencies *)
-  let t = Reductionops.whd_beta sigma0 (applist (h, args')) in 
+  let t = RO.whd_beta sigma0 (applist (h, args')) in
   let evi = Evd.find_undefined sigma0 ev in
   let nc = Evd.evar_filtered_context evi in
   let res = 
@@ -1092,7 +1102,7 @@ and instantiate' ts dir conv_t env (ev, subs as uv) args (h, args') (dbg, sigma0
 	let t' = Evarutil.nf_evar sigma1 t' in
 	let sigma1, t' = 
 	  Evarsolve.refresh_universes
-	    (if conv_t == Reduction.CUMUL && isArity t' then
+	    (if conv_t == R.CUMUL && isArity t' then
 	      (* ?X <= Type(i) -> X := Type j, j <= i *)
 	      (* Type(i) <= X -> X := Type j, i <= j *)
 	      Some (dir == Original) 
@@ -1107,10 +1117,10 @@ and instantiate' ts dir conv_t env (ev, subs as uv) args (h, args') (dbg, sigma0
               (* ?X : Π Δ. Type i = ?Y : Π Δ'. Type j.
 		 The body of ?X and ?Y just has to be of type Π Δ. Type k for some k <= i, j. *)
 	      let evienv = Evd.evar_env evi in
-	      let ctx1, i = Reduction.dest_arity evienv evi.Evd.evar_concl in
+	      let ctx1, i = R.dest_arity evienv evi.Evd.evar_concl in
 	      let evi2 = Evd.find sigma1 evk2 in
 	      let evi2env = Evd.evar_env evi2 in
-	      let ctx2, j = Reduction.dest_arity evi2env evi2.Evd.evar_concl in
+	      let ctx2, j = R.dest_arity evi2env evi2.Evd.evar_concl in
 	      let ui, uj = univ_of_sort i, univ_of_sort j in
 		if i == j || Evd.check_eq sigma1 ui uj
 		then (* Shortcut, i = j *) 
@@ -1127,13 +1137,13 @@ and instantiate' ts dir conv_t env (ev, subs as uv) args (h, args') (dbg, sigma0
 		  let t2 = it_mkProd_or_LetIn (mkSort k) ctx2 in
 		  let sigma1 = Evd.set_leq_sort env (Evd.set_leq_sort env sigma1 k i) k j in
 		    Success (dbg, Evd.downcast evk2 t2 (Evd.downcast ev t1 sigma1))
-	    | _ -> raise Reduction.NotArity
-	  with Reduction.NotArity -> 
+	    | _ -> raise R.NotArity
+	  with R.NotArity ->
 	    let ty' = Retyping.get_type_of env sigma1 t'' in
-	      unify_constr ~conv_t:Reduction.CUMUL ts env ty' ty (dbg, sigma1) 
+	      unify_constr ~conv_t:R.CUMUL ts env ty' ty (dbg, sigma1)
 	in
 	let p = unifty &&= fun (dbg, sigma2) ->
-	  let t' = Reductionops.nf_evar sigma2 t' in
+	  let t' = RO.nf_evar sigma2 t' in
 	    if Termops.occur_meta t' || Termops.occur_evar ev t' then 
 	      Err dbg
 	    else
@@ -1251,8 +1261,8 @@ and check_product dbg ts env sigma ty (name, a) =
   let sigma', univ = Evd.new_univ_variable Evd.univ_flexible sigma in
   let evi = Evd.make_evar (Environ.val_of_named_context nc') (mkType univ) in 
   let sigma'',v = Evarutil.new_pure_evar_full sigma' evi in
-  let idsubst = Array.append [| mkRel 1 |] (id_substitution nc) in
-    unify_constr ~conv_t:Reduction.CUMUL ts env ty (mkProd (Names.Name naid, a, mkEvar(v, idsubst))) (dbg, sigma'')
+  let idsubst = Array.of_list (mkRel 1 :: id_substitution nc) in
+    unify_constr ~conv_t:R.CUMUL ts env ty (mkProd (Names.Name naid, a, mkEvar(v, idsubst))) (dbg, sigma'')
 
 and eta_match conv_t ts env (name, a, t1) (th, tl as t) (dbg, sigma0 ) =
   let env' = Environ.push_rel (name, None, a) env in
@@ -1275,7 +1285,7 @@ and conv_record dbg trs env evd t t' =
       (evd,[],List.length bs) bs
   in
   report (
-    log_eq_spine env "CS" Reduction.CONV t t' (dbg, evd') &&=
+    log_eq_spine env "CS" R.CONV t t' (dbg, evd') &&=
     ise_list2 (fun x1 x -> unify_constr trs env x1 (substl ks x)) params1 params &&=
     ise_list2 (fun u1 u -> unify_constr trs env u1 (substl ks u)) us2 us &&=
     unify' trs env (decompose_app c1) (c,(List.rev ks)) &&=
