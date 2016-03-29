@@ -593,11 +593,12 @@ let intersect env sigma s1 s2 =
 let unify_same dbg env sigma ev subs1 subs2 =
   match intersect env sigma subs1 subs2 with
   | Some [] -> (false, Success (dbg, sigma))
-  | Some l -> begin
-              try 
-		(true, Success (dbg, prune sigma (ev, l)))
-              with CannotPrune -> (false, Err dbg)
-              end
+  | Some l ->
+    begin
+      try 
+        (true, Success (dbg, prune sigma (ev, l)))
+      with CannotPrune -> (false, Err dbg)
+    end
   | _ -> (false, Err dbg)
 
 (** given a list of arguments [args] = [x1 .. xn], a [body] with free
@@ -723,54 +724,49 @@ let try_conv conv_t ts env (c1, l1 as sp1) (c2, l2 as sp2) (dbg, sigma0) =
   if ground_spine sigma0 sp1 && ground_spine sigma0 sp2 then
     let app1 = applist sp1 and app2 = applist sp2 in
     try
-      begin
-        let (sigma1, b) = RO.infer_conv ~pb:conv_t ~ts env sigma0 app1 app2 in
-        if b then
-          report (log_eq_spine env "Reduce-Same" conv_t sp1 sp2 (dbg, sigma1))
-        else Err dbg
-      end
+      let (sigma1, b) = RO.infer_conv ~pb:conv_t ~ts env sigma0 app1 app2 in
+      if b then
+        report (log_eq_spine env "Reduce-Same" conv_t sp1 sp2 (dbg, sigma1))
+      else Err dbg
     with Univ.UniverseInconsistency _ -> Err dbg
   else Err dbg
 
 let try_hash env sp1 sp2 (dbg, sigma as dsigma) =
-  if use_hash () && tblfind tbl (sigma, env, sp1, sp2) then begin
-    log_eq_spine env "Hash-Hit" R.CONV sp1 sp2 dsigma &&= fun (dbg, _) ->
-      report (Err dbg)
-  end
+  if use_hash () && tblfind tbl (sigma, env, sp1, sp2) then
+    begin
+      log_eq_spine env "Hash-Hit" R.CONV sp1 sp2 dsigma &&= fun (dbg, _) ->
+        report (Err dbg)
+    end
   else
     Success (dbg, sigma)
 
+(** Given a head term c and with arguments l it whd reduces c if it is
+    an evar, returning the new head and list of arguments.
+*)
+let decompose_evar sigma (c, l as cl) =
+  if isEvar c && Evd.is_defined sigma (fst (destEvar c)) then
+    let (c', l') = decompose_app (Evarutil.whd_head_evar sigma c) in
+    (c', l' @ l)
+  else
+    cl
+
 (** {3 "The Function" is split into several} *)
-let rec unify' ?(conv_t=R.CONV) ts env (c, l) (c', l') (dbg, sigma0 as dsigma) =
-  let (c, l1) = decompose_app (Evarutil.whd_head_evar sigma0 c) in
-  let (c', l2) = decompose_app (Evarutil.whd_head_evar sigma0 c') in
-  let l, l' = l1 @ l, l2 @ l' in
-  let t, t' = (c, l), (c', l') in
-  try_conv conv_t ts env t t' dsigma ||= fun dbg ->
-    try_hash env t t' dsigma &&= fun (dbg, sigma0) ->
+let rec unify' ?(conv_t=R.CONV) ts env t t' (dbg, sigma) =
+  let (c, l as t) = decompose_evar sigma t in
+  let (c', l' as t') = decompose_evar sigma t' in
+  try_conv conv_t ts env t t' (dbg, sigma) ||= fun dbg ->
+    try_hash env t t' (dbg, sigma) &&= fun (dbg, sigma) ->
     let res =
       begin
         if isEvar c || isEvar c' then
-          one_is_meta dbg ts conv_t env sigma0 t t'
+          one_is_meta dbg ts conv_t env sigma t t'
         else
-          (
-            if (isConst c || isConst c') && not (eq_constr c c') then
-              begin
-                if is_lift c && List.length l = 3 then
-	          run_and_unify dbg ts env sigma0 l t'
-                else if is_lift c' && List.length l' = 3 then
-	          run_and_unify dbg ts env sigma0 l' t
-                else
-	          Err dbg
-              end
-            else
-              Err dbg
-          ) ||= fun dbg ->
+          try_run_and_unify ts env t t' (dbg, sigma) ||= fun dbg ->
             (
               if (isConst c || isConst c') && not (eq_constr c c') then
-                try conv_record dbg ts env sigma0 t t'
+                try conv_record dbg ts env sigma t t'
                 with ProjectionNotFound ->
-                try conv_record dbg ts env sigma0 t' t
+                try conv_record dbg ts env sigma t' t
                 with ProjectionNotFound -> Err dbg
               else
                 Err dbg
@@ -780,7 +776,7 @@ let rec unify' ?(conv_t=R.CONV) ts env (c, l) (c', l') (dbg, sigma0 as dsigma) =
                 let m = List.length l' in
                 if n = m then 
 	          begin report (
-               log_eq_spine env "App-FO" conv_t t t' (dbg, sigma0) &&=
+               log_eq_spine env "App-FO" conv_t t t' (dbg, sigma) &&=
                compare_heads conv_t ts env c c' &&=
                ise_list2 (unify_constr ts env) l l' 
              ) end
@@ -788,16 +784,29 @@ let rec unify' ?(conv_t=R.CONV) ts env (c, l) (c', l') (dbg, sigma0 as dsigma) =
 	          Err dbg
               ) ||= fun dbg ->
                 (
-	          try_step dbg conv_t ts env sigma0 t t'
+	          try_step dbg conv_t ts env sigma t t'
                 ) 
       end
     in
     if not (is_success res) && use_hash () then
-      Hashtbl.add tbl (sigma0, env, t, t') true;
+      Hashtbl.add tbl (sigma, env, t, t') true;
     res
 
 and unify_constr ?(conv_t=R.CONV) ts env t t' =
   unify' ~conv_t ts env (decompose_app t) (decompose_app t')
+
+and try_run_and_unify ts env (c, l as t) (c', l' as t') (dbg, sigma) =
+  if (isConst c || isConst c') && not (eq_constr c c') then
+    begin
+      if is_lift c && List.length l = 3 then
+	run_and_unify dbg ts env sigma l t'
+      else if is_lift c' && List.length l' = 3 then
+	run_and_unify dbg ts env sigma l' t
+      else
+	Err dbg
+    end
+  else
+    Err dbg
 
 and run_and_unify dbg ts env sigma0 args ty =
   let a, f, v = List.nth args 0, List.nth args 1, List.nth args 2 in
