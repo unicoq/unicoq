@@ -757,20 +757,12 @@ let rec unify' ?(conv_t=R.CONV) ts env t t' (dbg, sigma) =
   try_conv conv_t ts env t t' (dbg, sigma) ||= fun dbg ->
     try_hash env t t' (dbg, sigma) &&= fun (dbg, sigma) ->
     let res =
-      begin
-        if isEvar c || isEvar c' then
-          one_is_meta dbg ts conv_t env sigma t t'
-        else
+      if isEvar c || isEvar c' then
+        one_is_meta dbg ts conv_t env sigma t t'
+      else
+        begin
           try_run_and_unify ts env t t' (dbg, sigma) ||= fun dbg ->
-            (
-              if (isConst c || isConst c') && not (eq_constr c c') then
-                try conv_record dbg ts env sigma t t'
-                with ProjectionNotFound ->
-                try conv_record dbg ts env sigma t' t
-                with ProjectionNotFound -> Err dbg
-              else
-                Err dbg
-            ) ||= fun dbg ->
+            try_canonical_structures ts env t t' (dbg, sigma) ||= fun dbg ->
               (
                 let n = List.length l in
                 let m = List.length l' in
@@ -1287,6 +1279,15 @@ and eta_match conv_t ts env (name, a, t1) (th, tl as t) (dbg, sigma0 ) =
   let ty = Retyping.get_type_of env sigma0 (applist t) in
     check_product dbg ts env sigma0 ty (name, a) &&=
       unify_constr ~conv_t ts env' t1 t'
+
+and try_canonical_structures ts env (c, _ as t) (c', _ as t') (dbg, sigma) =
+  if (isConst c || isConst c') && not (eq_constr c c') then
+    try conv_record dbg ts env sigma t t'
+    with ProjectionNotFound ->
+    try conv_record dbg ts env sigma t' t
+    with ProjectionNotFound -> Err dbg
+  else
+    Err dbg
 
 and conv_record dbg trs env evd t t' =
   let (c,bs,(params,params1),(us,us2),(ts,ts1),c1,(n,t2)) = check_conv_record t t' in
