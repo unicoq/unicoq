@@ -763,26 +763,25 @@ let rec unify' ?(conv_t=R.CONV) ts env t t' (dbg, sigma) =
         begin
           try_run_and_unify ts env t t' (dbg, sigma) ||= fun dbg ->
             try_canonical_structures ts env t t' (dbg, sigma) ||= fun dbg ->
-              (
-                let n = List.length l in
-                let m = List.length l' in
-                if n = m then 
-	          begin report (
-               log_eq_spine env "App-FO" conv_t t t' (dbg, sigma) &&=
-               compare_heads conv_t ts env c c' &&=
-               ise_list2 (unify_constr ts env) l l' 
-             ) end
-                else
-	          Err dbg
-              ) ||= fun dbg ->
-                (
-	          try_step dbg conv_t ts env sigma t t'
-                ) 
-      end
+              try_app_fo conv_t ts env t t' (dbg, sigma) ||= fun dbg ->
+	        try_step dbg conv_t ts env sigma t t'
+        end
     in
     if not (is_success res) && use_hash () then
       Hashtbl.add tbl (sigma, env, t, t') true;
     res
+
+and try_app_fo conv_t ts env (c, l as t) (c', l' as t') (dbg, sigma) =
+  if List.length l = List.length l' then 
+    begin
+      report (
+        log_eq_spine env "App-FO" conv_t t t' (dbg, sigma) &&=
+        compare_heads conv_t ts env c c' &&=
+        ise_list2 (unify_constr ts env) l l'
+      )
+    end
+  else
+    Err dbg
 
 and unify_constr ?(conv_t=R.CONV) ts env t t' =
   unify' ~conv_t ts env (decompose_app t) (decompose_app t')
