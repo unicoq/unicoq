@@ -750,11 +750,8 @@ let try_hash env sp1 sp2 (dbg, sigma as dsigma) =
     an evar, returning the new head and list of arguments.
 *)
 let decompose_evar sigma (c, l as cl) =
-  if isEvar c && Evd.is_defined sigma (fst (destEvar c)) then
-    let (c', l') = decompose_app (Evarutil.whd_head_evar sigma c) in
-    (c', l' @ l)
-  else
-    cl
+  let (c', l') = decompose_app (Evarutil.whd_head_evar sigma c) in
+  (c', l' @ l)
 
 (** {3 "The Function" is split into several} *)
 let rec unify' ?(conv_t=R.CONV) ts env t t' (dbg, sigma) =
