@@ -274,15 +274,21 @@ let log_eq env rule conv_t t1 t2 (l, sigma) =
   if not (get_debug () || !trace) then
     Success (l, sigma)
   else
-    let str1 = Pp.string_of_ppcmds (Termops.print_constr_env env t1) in
-    let str2 = Pp.string_of_ppcmds (Termops.print_constr_env env t2) in 
+    let ppcmd_of env t =
+      try Termops.print_constr_env env t
+      with _ -> Termops.print_constr t in
+    let str1 = Pp.string_of_ppcmds (ppcmd_of env t1) in
+    let str2 = Pp.string_of_ppcmds (ppcmd_of env t2) in
     let str1 = latexify str1 in
     let str2 = latexify str2 in
     let l = Logger.newNode !trace (rule, (conv_t, str1, str2)) l in 
     Success (l, sigma)
   
-let log_eq_spine env rule conv_t t1 t2 = 
-  log_eq env rule conv_t (applist t1) (applist t2)
+let log_eq_spine env rule conv_t t1 t2 (l, sigma as dsigma) =
+  if not (get_debug () || !trace) then
+    Success (l, sigma)
+  else
+    log_eq env rule conv_t (applist t1) (applist t2) dsigma
 
 let debug_str s l =
   if !debug then
@@ -752,6 +758,7 @@ let decompose_evar sigma (c, l as cl) =
 
 (** {3 "The Function" is split into several} *)
 let rec unify' ?(conv_t=R.CONV) ts env t t' (dbg, sigma) =
+  assert (not (isApp (fst t) || isApp (fst t')));
   let (c, l as t) = decompose_evar sigma t in
   let (c', l' as t') = decompose_evar sigma t' in
   try_conv conv_t ts env t t' (dbg, sigma) ||= fun dbg ->
@@ -1014,13 +1021,15 @@ and try_step ?(stuck=NotStucked) conv_t ts env (c, l as t) (c', l' as t') sigma0
   match (kind_of_term c, kind_of_term c') with
   (* Lam-BetaR *)
   | _, Lambda (_, _, trm) when not (CList.is_empty l') ->
-    let t2 = (subst1 (List.hd l') trm, List.tl l') in
+    let (c2, l2) = decompose_app (subst1 (List.hd l') trm) in
+    let t2 = (c2, l2 @ List.tl l') in
     report (
       log_eq_spine env "Lam-BetaR" conv_t t t' (dbg, sigma0) &&=
       unify' ~conv_t ts env t t2)
 
   | _, LetIn (_, trm, _, body) ->
-    let t2 = (subst1 trm body, l') in
+    let (c2, l2) = decompose_app (subst1 trm body) in
+    let t2 = (c2, l2 @ l') in
     report (
       log_eq_spine env "Let-ZetaR" conv_t t t' (dbg, sigma0) &&=
       unify' ~conv_t ts env t t2)
@@ -1038,13 +1047,15 @@ and try_step ?(stuck=NotStucked) conv_t ts env (c, l as t) (c', l' as t') sigma0
 
   (* Lam-BetaL *)
   | Lambda (_, _, trm), _ when not (CList.is_empty l) ->
-    let t1 = (subst1 (List.hd l) trm, List.tl l) in
+    let (c1, l1) = decompose_app (subst1 (List.hd l) trm) in
+    let t1 = (c1, l1 @ List.tl l) in
     report (
       log_eq_spine env "Lam-BetaL" conv_t t t' (dbg, sigma0) &&=
       unify' ~conv_t ts env t1 t')
   (* Let-ZetaL *)
   | LetIn (_, trm, _, body), _ ->
-    let t1 = (subst1 trm body, l) in
+    let (c1, l1) = decompose_app (subst1 trm body) in
+    let t1 = (c1, l1 @ l) in
     report (
       log_eq_spine env "Let-ZetaL" conv_t t t' (dbg, sigma0) &&=
       unify' ~conv_t ts env t1 t')

@@ -11,3 +11,4 @@ src/unitactics.ml4
 src/unicoq.mllib
 theories/Unicoq.v
 test-suite/munifytest.v
+test-suite/microtests.v

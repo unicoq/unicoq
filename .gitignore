@@ -38,6 +38,8 @@ Makefile
 *.v.html
 *.stamp
 coqdoc.sty
+doc/*.html
+doc/*.css
 
 # emacs save files
 *~

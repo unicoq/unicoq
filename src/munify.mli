@@ -15,3 +15,11 @@ val unify_constr : ?conv_t:Evd.conv_pb ->
 val unify_evar_conv : Names.transparent_state -> Evarsolve.conv_fun
 
 val get_stats : unit -> stats
+
+(** DEBUGGING *)
+val unify' : ?conv_t:Reduction.conv_pb ->
+  Names.transparent_state ->
+  Environ.env ->
+  Term.constr * Term.constr list ->
+  Term.constr * Term.constr list ->
+  Logger.log * Evd.evar_map -> unif

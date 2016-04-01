@@ -42,12 +42,9 @@ let rec depth l =
   | Node (_, p, _, _) -> depth p + 1
 
 let print_node (s, (conv_t, c1, c2)) =
-  output_string stdout c1;
-  output_string stdout (if conv_t = Reduction.CONV then " =?= " else " =<= ");
-  output_string stdout c2;
-  output_string stdout " (";
-  output_string stdout s;
-  output_string stdout ")"
+  let conv = if conv_t = Reduction.CONV then "=?=" else "=<=" in
+  Printf.printf "%s %s %s (%s)" c1 conv c2 s;
+  flush stdout
 
 let newNode print v l =
   if print then
