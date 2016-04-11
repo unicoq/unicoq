@@ -39,8 +39,6 @@ Example same1 : let X := _ : nat -> nat in (X x, X x) = (X x, x) := eq_refl.
 Example prod1 : (forall (T:Type) (t : T), t = t) = (forall (T:_) (t : _), _ = _) := eq_refl.
 Print prod1.
 
-Unset Unicoq Trace.
-Unset Unicoq Debug.
-
 Example prod2 : (forall (t : Prop), True) = (forall (t : Prop), _ : Prop) := eq_refl.
 
+End Inst.
