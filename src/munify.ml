@@ -749,7 +749,7 @@ let try_hash env sp1 sp2 (dbg, sigma as dsigma) =
 (** Given a head term c and with arguments l it whd reduces c if it is
     an evar, returning the new head and list of arguments.
 *)
-let decompose_evar sigma (c, l as cl) =
+let decompose_evar sigma (c, l) =
   let (c', l') = decompose_app (Evarutil.whd_head_evar sigma c) in
   (c', l' @ l)
 
