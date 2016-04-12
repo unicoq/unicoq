@@ -26,10 +26,12 @@ let munify_tac gl x y =
   let env = Goal.env gl in
   let sigma = Goal.sigma gl in
   let evars evm = V82.tactic (Refiner.tclEVARS evm) in
-  let res = unify_constr (Conv_oracle.get_transp_state (Environ.oracle env)) env x y (Logger.init, sigma) in
+  let res = 
+    let ts = Conv_oracle.get_transp_state (Environ.oracle env) in
+    unify_evar_conv ts env sigma Reduction.CUMUL x y in
     match res with
-    | Success (log, evm) -> evars evm
-    | Err _ -> Tacticals.New.tclFAIL 0 (str"Unification failed")
+    | Evarsolve.Success evm -> evars evm
+    | Evarsolve.UnifFailure _ -> Tacticals.New.tclFAIL 0 (str"Unification failed")
 
 (* This adds an entry to the grammar of tactics, similar to what
    Tactic Notation does. *)

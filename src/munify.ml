@@ -709,489 +709,494 @@ let specialize_evar env sigma (ev, subs) args =
 exception InternalException
 
 (** {2 The function} *)
+module type Params = sig
+  val ts : Names.transparent_state
+end
 
-(** Enum type indicating where it is useless to reduce. *)
-type stucked = NotStucked | StuckedLeft | StuckedRight
+module Unif (P : Params) = struct
+  open P
 
-(** Enum type indicating if the algorithm must swap the lhs and rhs. *)
-type direction = Original | Swap
+  (** Enum type indicating where it is useless to reduce. *)
+  type stucked = NotStucked | StuckedLeft | StuckedRight
 
-let switch dir f t u = if dir == Original then f t u else f u t
+  (** Enum type indicating if the algorithm must swap the lhs and rhs. *)
+  type direction = Original | Swap
 
-(** {3 Hashing table of failures} *)
-let tbl = Hashtbl.create 1000
+  let switch dir f t u = if dir == Original then f t u else f u t
 
-let tblfind t x = try Hashtbl.find t x with Not_found -> false
+  (** {3 Hashing table of failures} *)
+  let tbl = Hashtbl.create 1000
 
-let ground_spine sigma (h, args) =
-  EU.is_ground_term sigma h && List.for_all (EU.is_ground_term sigma) args
+  let tblfind t x = try Hashtbl.find t x with Not_found -> false
 
-let try_conv conv_t ts env (c1, l1 as sp1) (c2, l2 as sp2) (dbg, sigma0) =
-  if ground_spine sigma0 sp1 && ground_spine sigma0 sp2 then
-    let app1 = applist sp1 and app2 = applist sp2 in
-    try
-      let (sigma1, b) = RO.infer_conv ~pb:conv_t ~ts env sigma0 app1 app2 in
-      if b then
-        report (log_eq_spine env "Reduce-Same" conv_t sp1 sp2 (dbg, sigma1))
-      else Err dbg
-    with Univ.UniverseInconsistency _ -> Err dbg
-  else Err dbg
+  let ground_spine sigma (h, args) =
+    EU.is_ground_term sigma h && List.for_all (EU.is_ground_term sigma) args
 
-let try_hash env sp1 sp2 (dbg, sigma as dsigma) =
-  if use_hash () && tblfind tbl (sigma, env, sp1, sp2) then
-    begin
-      log_eq_spine env "Hash-Hit" R.CONV sp1 sp2 dsigma &&= fun (dbg, _) ->
-        report (Err dbg)
-    end
-  else
-    Success (dbg, sigma)
+  let try_conv conv_t env (c1, l1 as sp1) (c2, l2 as sp2) (dbg, sigma0) =
+    if ground_spine sigma0 sp1 && ground_spine sigma0 sp2 then
+      let app1 = applist sp1 and app2 = applist sp2 in
+      try
+        let (sigma1, b) = RO.infer_conv ~pb:conv_t ~ts env sigma0 app1 app2 in
+        if b then
+          report (log_eq_spine env "Reduce-Same" conv_t sp1 sp2 (dbg, sigma1))
+        else Err dbg
+      with Univ.UniverseInconsistency _ -> Err dbg
+    else Err dbg
 
-(** Given a head term c and with arguments l it whd reduces c if it is
-    an evar, returning the new head and list of arguments.
-*)
-let decompose_evar sigma (c, l) =
-  let (c', l') = decompose_app (Evarutil.whd_head_evar sigma c) in
-  (c', l' @ l)
-
-(** {3 "The Function" is split into several} *)
-let rec unify' ?(conv_t=R.CONV) ts env t t' (dbg, sigma) =
-  assert (not (isApp (fst t) || isApp (fst t')));
-  let (c, l as t) = decompose_evar sigma t in
-  let (c', l' as t') = decompose_evar sigma t' in
-  try_conv conv_t ts env t t' (dbg, sigma) ||= fun dbg ->
-    try_hash env t t' (dbg, sigma) &&= fun (dbg, sigma) ->
-    let res =
-      if isEvar c || isEvar c' then
-        one_is_meta dbg ts conv_t env sigma t t'
-      else
-        begin
-          try_run_and_unify ts env t t' sigma dbg
-          ||= try_canonical_structures ts env t t' sigma
-          ||= try_app_fo conv_t ts env t t' sigma
-          ||= try_step conv_t ts env t t' sigma
-        end
-    in
-    if not (is_success res) && use_hash () then
-      Hashtbl.add tbl (sigma, env, t, t') true;
-    res
-
-and unify_constr ?(conv_t=R.CONV) ts env t t' =
-  unify' ~conv_t ts env (decompose_app t) (decompose_app t')
-
-and unify_evar_conv ts env sigma0 conv_t t t' =
-  let interesting log = (* if it's not just Reduce-Same *)
-    match !log with
-    | Logger.Node (("Reduce-Same", _), _, true, _) -> false
-    | _ -> true in
-  dstats.unif_problems <- succ_big_int dstats.unif_problems;
-  Hashtbl.clear tbl;
-  match unify_constr ~conv_t:conv_t ts env t t' (Logger.init, sigma0) with
-  | Success (log, sigma') -> 
-    if get_debug () && interesting log then
+  let try_hash env sp1 sp2 (dbg, sigma as dsigma) =
+    if use_hash () && tblfind tbl (sigma, env, sp1, sp2) then
       begin
-        Logger.print_latex !latex_file print_eq log;
-        Logger.print_to_stdout log;
-      end
-    else ();
-    Evarsolve.Success sigma'
-  | Err log ->
-    if get_debug () then Logger.print_to_stdout log;
-    Evarsolve.UnifFailure (sigma0, Pretype_errors.NotSameHead)
-
-and try_run_and_unify ts env (c, l as t) (c', l' as t') sigma dbg =
-  if (isConst c || isConst c') && not (eq_constr c c') then
-    begin
-      if is_lift c && List.length l = 3 then
-	run_and_unify dbg ts env sigma l t'
-      else if is_lift c' && List.length l' = 3 then
-	run_and_unify dbg ts env sigma l' t
-      else
-	Err dbg
-    end
-  else
-    Err dbg
-
-and run_and_unify dbg ts env sigma0 args ty =
-  let a, f, v = List.nth args 0, List.nth args 1, List.nth args 2 in
-    unify' ~conv_t:R.CUMUL ts env (decompose_app a) ty (dbg, sigma0) &&= fun (dbg, sigma1) ->
-      match !run_function env sigma1 f with
-      | Some (sigma2, v') -> unify' ts env (decompose_app v) (decompose_app v') (dbg, sigma2)
-      | _ -> Err dbg
-
-and try_canonical_structures ts env (c, _ as t) (c', _ as t') sigma dbg =
-  if (isConst c || isConst c') && not (eq_constr c c') then
-    try conv_record dbg ts env sigma t t'
-    with ProjectionNotFound ->
-    try conv_record dbg ts env sigma t' t
-    with ProjectionNotFound -> Err dbg
-  else
-    Err dbg
-
-and conv_record dbg trs env evd t t' =
-  let (c,bs,(params,params1),(us,us2),(ts,ts1),c1,(n,t2)) = check_conv_record t t' in
-  let (evd',ks,_) =
-    List.fold_left
-      (fun (i,ks,m) b ->
-	match n with
-	| Some n when m = n -> (i,t2::ks, m-1)
-	| _ ->
-	  let dloc = (Loc.dummy_loc, Evar_kinds.InternalHole) in
-          let (i',ev) = Evarutil.new_evar env i ~src:dloc (substl ks b) in
-	    (i', ev :: ks, m - 1))
-      (evd,[],List.length bs) bs
-  in
-  report (
-    log_eq_spine env "CS" R.CONV t t' (dbg, evd') &&=
-    ise_list2 (fun x1 x -> unify_constr trs env x1 (substl ks x)) params1 params &&=
-    ise_list2 (fun u1 u -> unify_constr trs env u1 (substl ks u)) us2 us &&=
-    unify' trs env (decompose_app c1) (c,(List.rev ks)) &&=
-    ise_list2 (unify_constr trs env) ts ts1)
-
-and try_app_fo conv_t ts env (c, l as t) (c', l' as t') sigma dbg =
-  if List.length l = List.length l' then
-    begin
-      report (
-        log_eq_spine env "App-FO" conv_t t t' (dbg, sigma) &&=
-        compare_heads conv_t ts env c c' &&=
-        ise_list2 (unify_constr ts env) l l'
-      )
-    end
-  else
-    Err dbg
-
-and one_is_meta dbg ts conv_t env sigma0 (c, l as t) (c', l' as t') =
-  (* first we instantiate all defined metas *)
-  let nf_map = List.map (fun a->RO.nf_evar sigma0 a) in
-  let (c, l) = (RO.nf_evar sigma0 c, nf_map l) in
-  let (c', l') = (RO.nf_evar sigma0 c', nf_map l') in
-  if isEvar c && isEvar c' then
-    let (k1, s1 as e1), (k2, s2 as e2) = destEvar c, destEvar c' in
-    if k1 = k2 then
-      (* Meta-Same *)
-      begin
-        let (b,p) = unify_same dbg env sigma0 k1 s1 s2 in
-        let dbg, sigma = match p with
-          | Success (dbg, sigma) -> dbg, sigma
-          | Err dbg -> dbg, sigma0
-        in
-        let rule = if b then "Meta-Same" else "Meta-Same-Same" in
-        log_eq_spine env rule conv_t t t' (dbg, sigma) &&= fun (dbg, sigma) ->
-        if is_success p then
-          report (ise_list2 (unify_constr ts env) l l' (dbg, sigma))
-        else
+        log_eq_spine env "Hash-Hit" R.CONV sp1 sp2 dsigma &&= fun (dbg, _) ->
           report (Err dbg)
       end
     else
-      begin
-	(* Meta-Meta: we try both directions, but first the one with the
-           longest substitution. *)
-        let dir1, dir2, var1, var2, term1, term2 =
-          if Array.length s1 > Array.length s2 then
-            Original, Swap, (e1, l), (e2, l'), t', t
-          else
-            Swap, Original, (e2, l'), (e1, l), t, t'
-        in
-        meta_inst dir1 ts conv_t env var1 term1 sigma0 dbg
-        ||= meta_inst dir2 ts conv_t env var2 term2 sigma0
-        ||= meta_fo dir1 conv_t ts env var1 term1 sigma0
-        ||= meta_fo dir2 conv_t ts env var2 term2 sigma0
-        ||= meta_deldeps dir1 ts conv_t env var1 term1 sigma0
-        ||= meta_deldeps dir2 ts conv_t env var2 term2 sigma0
-        ||= meta_specialize dir1 ts conv_t env var1 term1 sigma0
-        ||= meta_specialize dir2 ts conv_t env var2 term2 sigma0
-        ||= try_solve_simple_eqn ts conv_t env var1 term1 sigma0
-      end
-  else
-  if isEvar c then
-    if is_lift c' && List.length l' = 3 then
-      run_and_unify dbg ts env sigma0 l' t
-    else
-      let e1 = destEvar c in
-      instantiate ts conv_t env (e1, l) t' sigma0 dbg
-  else
-  if is_lift c && List.length l = 3 then
-    run_and_unify dbg ts env sigma0 l t'
-  else
-    let e2 = destEvar c' in
-    instantiate ~dir:Swap ts conv_t env (e2, l') t sigma0 dbg
+      Success (dbg, sigma)
 
-and try_solve_simple_eqn ?(dir=Original) ts conv_t env (evsubs, args) t sigma dbg =
-  if get_solving_eqn () then
-    try
-      let t = Evarsolve.solve_pattern_eqn env args (applist t) in
-      let pbty = match conv_t with
-	| R.CONV -> None
-	| R.CUMUL -> Some (dir == Original)
-      in
-	match Evarsolve.solve_simple_eqn (unify_evar_conv ts) env sigma (pbty, evsubs, t) with
-	| Evarsolve.Success sigma' ->
-	  Printf.printf "%s" "solve_simple_eqn solved it: ";
+  (** Given a head term c and with arguments l it whd reduces c if it is
+      an evar, returning the new head and list of arguments.
+  *)
+  let decompose_evar sigma (c, l) =
+    let (c', l') = decompose_app (Evarutil.whd_head_evar sigma c) in
+    (c', l' @ l)
+
+  (** {3 "The Function" is split into several} *)
+  let rec unify' ?(conv_t=R.CONV) env t t' (dbg, sigma) =
+    assert (not (isApp (fst t) || isApp (fst t')));
+    let (c, l as t) = decompose_evar sigma t in
+    let (c', l' as t') = decompose_evar sigma t' in
+    try_conv conv_t env t t' (dbg, sigma) ||= fun dbg ->
+      try_hash env t t' (dbg, sigma) &&= fun (dbg, sigma) ->
+        let res =
+          if isEvar c || isEvar c' then
+            one_is_meta dbg conv_t env sigma t t'
+          else
+            begin
+              try_run_and_unify env t t' sigma dbg
+              ||= try_canonical_structures env t t' sigma
+              ||= try_app_fo conv_t env t t' sigma
+              ||= try_step conv_t env t t' sigma
+            end
+        in
+        if not (is_success res) && use_hash () then
+          Hashtbl.add tbl (sigma, env, t, t') true;
+        res
+
+  and unify_constr ?(conv_t=R.CONV) env t t' =
+    unify' ~conv_t env (decompose_app t) (decompose_app t')
+
+  and unify_evar_conv env sigma0 conv_t t t' =
+    let interesting log = (* if it's not just Reduce-Same *)
+      match !log with
+      | Logger.Node (("Reduce-Same", _), _, true, _) -> false
+      | _ -> true in
+    dstats.unif_problems <- succ_big_int dstats.unif_problems;
+    Hashtbl.clear tbl;
+    match unify_constr ~conv_t:conv_t env t t' (Logger.init, sigma0) with
+    | Success (log, sigma') -> 
+      if get_debug () && interesting log then
+        begin
+          Logger.print_latex !latex_file print_eq log;
+          Logger.print_to_stdout log;
+        end
+      else ();
+      Evarsolve.Success sigma'
+    | Err log ->
+      if get_debug () then Logger.print_to_stdout log;
+      Evarsolve.UnifFailure (sigma0, Pretype_errors.NotSameHead)
+
+  and try_run_and_unify env (c, l as t) (c', l' as t') sigma dbg =
+    if (isConst c || isConst c') && not (eq_constr c c') then
+      begin
+        if is_lift c && List.length l = 3 then
+	  run_and_unify dbg env sigma l t'
+        else if is_lift c' && List.length l' = 3 then
+	  run_and_unify dbg env sigma l' t
+        else
+	  Err dbg
+      end
+    else
+      Err dbg
+
+  and run_and_unify dbg env sigma0 args ty =
+    let a, f, v = List.nth args 0, List.nth args 1, List.nth args 2 in
+    unify' ~conv_t:R.CUMUL env (decompose_app a) ty (dbg, sigma0) &&= fun (dbg, sigma1) ->
+      match !run_function env sigma1 f with
+      | Some (sigma2, v') -> unify' env (decompose_app v) (decompose_app v') (dbg, sigma2)
+      | _ -> Err dbg
+
+  and try_canonical_structures env (c, _ as t) (c', _ as t') sigma dbg =
+    if (isConst c || isConst c') && not (eq_constr c c') then
+      try conv_record dbg env sigma t t'
+      with ProjectionNotFound ->
+      try conv_record dbg env sigma t' t
+      with ProjectionNotFound -> Err dbg
+    else
+      Err dbg
+
+  and conv_record dbg env evd t t' =
+    let (c,bs,(params,params1),(us,us2),(ts,ts1),c1,(n,t2)) = check_conv_record t t' in
+    let (evd',ks,_) =
+      List.fold_left
+        (fun (i,ks,m) b ->
+	   match n with
+           | Some n when m = n -> (i,t2::ks, m-1)
+           | _ ->
+             let dloc = (Loc.dummy_loc, Evar_kinds.InternalHole) in
+             let (i',ev) = Evarutil.new_evar env i ~src:dloc (substl ks b) in
+             (i', ev :: ks, m - 1))
+        (evd,[],List.length bs) bs
+    in
+    report (
+      log_eq_spine env "CS" R.CONV t t' (dbg, evd') &&=
+      ise_list2 (fun x1 x -> unify_constr env x1 (substl ks x)) params1 params &&=
+      ise_list2 (fun u1 u -> unify_constr env u1 (substl ks u)) us2 us &&=
+      unify' env (decompose_app c1) (c,(List.rev ks)) &&=
+      ise_list2 (unify_constr env) ts ts1)
+
+  and try_app_fo conv_t env (c, l as t) (c', l' as t') sigma dbg =
+    if List.length l = List.length l' then
+      begin
+        report (
+          log_eq_spine env "App-FO" conv_t t t' (dbg, sigma) &&=
+          compare_heads conv_t env c c' &&=
+          ise_list2 (unify_constr env) l l'
+        )
+      end
+    else
+      Err dbg
+
+  and one_is_meta dbg conv_t env sigma0 (c, l as t) (c', l' as t') =
+    (* first we instantiate all defined metas *)
+    let nf_map = List.map (fun a->RO.nf_evar sigma0 a) in
+    let (c, l) = (RO.nf_evar sigma0 c, nf_map l) in
+    let (c', l') = (RO.nf_evar sigma0 c', nf_map l') in
+    if isEvar c && isEvar c' then
+      let (k1, s1 as e1), (k2, s2 as e2) = destEvar c, destEvar c' in
+      if k1 = k2 then
+        (* Meta-Same *)
+        begin
+          let (b,p) = unify_same dbg env sigma0 k1 s1 s2 in
+          let dbg, sigma = match p with
+            | Success (dbg, sigma) -> dbg, sigma
+            | Err dbg -> dbg, sigma0
+          in
+          let rule = if b then "Meta-Same" else "Meta-Same-Same" in
+          log_eq_spine env rule conv_t t t' (dbg, sigma) &&= fun (dbg, sigma) ->
+            if is_success p then
+              report (ise_list2 (unify_constr env) l l' (dbg, sigma))
+            else
+              report (Err dbg)
+        end
+      else
+        begin
+	  (* Meta-Meta: we try both directions, but first the one with the
+           longest substitution. *)
+          let dir1, dir2, var1, var2, term1, term2 =
+            if Array.length s1 > Array.length s2 then
+              Original, Swap, (e1, l), (e2, l'), t', t
+            else
+              Swap, Original, (e2, l'), (e1, l), t, t'
+          in
+          meta_inst dir1 conv_t env var1 term1 sigma0 dbg
+          ||= meta_inst dir2 conv_t env var2 term2 sigma0
+          ||= meta_fo dir1 conv_t env var1 term1 sigma0
+          ||= meta_fo dir2 conv_t env var2 term2 sigma0
+          ||= meta_deldeps dir1 conv_t env var1 term1 sigma0
+          ||= meta_deldeps dir2 conv_t env var2 term2 sigma0
+          ||= meta_specialize dir1 conv_t env var1 term1 sigma0
+          ||= meta_specialize dir2 conv_t env var2 term2 sigma0
+          ||= try_solve_simple_eqn conv_t env var1 term1 sigma0
+        end
+    else
+    if isEvar c then
+      if is_lift c' && List.length l' = 3 then
+        run_and_unify dbg env sigma0 l' t
+      else
+        let e1 = destEvar c in
+        instantiate conv_t env (e1, l) t' sigma0 dbg
+    else
+    if is_lift c && List.length l = 3 then
+      run_and_unify dbg env sigma0 l t'
+    else
+      let e2 = destEvar c' in
+      instantiate ~dir:Swap conv_t env (e2, l') t sigma0 dbg
+
+  and try_solve_simple_eqn ?(dir=Original) conv_t env (evsubs, args) t sigma dbg =
+    if get_solving_eqn () then
+      try
+        let t = Evarsolve.solve_pattern_eqn env args (applist t) in
+        let pbty = match conv_t with
+	    R.CONV -> None
+          | R.CUMUL -> Some (dir == Original)
+        in
+	match Evarsolve.solve_simple_eqn unify_evar_conv env sigma (pbty, evsubs, t) with
+          Evarsolve.Success sigma' ->
+          Printf.printf "%s" "solve_simple_eqn solved it: ";
 	  debug_eq sigma env R.CONV (mkEvar evsubs, []) (decompose_app t) 0;
 	  Success (dbg, sigma')
 	| Evarsolve.UnifFailure (sigma', error) -> Err dbg
-    with _ ->
-      Printf.printf "%s" "solve_simple_eqn failed!";
+      with _ ->
+        Printf.printf "%s" "solve_simple_eqn failed!";
+        Err dbg
+    else
       Err dbg
-  else
-    Err dbg
 
-and compare_heads conv_t ts env c c' (dbg, sigma0) =
-  let rigid_same () = report (log_eq env "Rigid-Same" conv_t c c' (dbg, sigma0)) in
-  match (kind_of_term c, kind_of_term c') with
-  (* Type-Same *)
-  | Sort s1, Sort s2 ->
-    log_eq env "Type-Same" conv_t c c' (dbg, sigma0) &&= fun (dbg, sigma0) ->
-    begin
-      try
-	let sigma1 = match conv_t with
-	  | R.CONV -> Evd.set_eq_sort env sigma0 s1 s2
-	  | R.CUMUL -> Evd.set_leq_sort env sigma0 s1 s2
-        in
-        report (Success (dbg, sigma1))
-      with Univ.UniverseInconsistency e -> 
-	debug_str (Printf.sprintf "Type-Same exception: %s"
-		     (Pp.string_of_ppcmds (Univ.explain_universe_inconsistency Univ.Level.pr e))) 0;
-	report (Err dbg)
-    end
+  and compare_heads conv_t env c c' (dbg, sigma0) =
+    let rigid_same () = report (log_eq env "Rigid-Same" conv_t c c' (dbg, sigma0)) in
+    match (kind_of_term c, kind_of_term c') with
+    (* Type-Same *)
+    | Sort s1, Sort s2 ->
+      log_eq env "Type-Same" conv_t c c' (dbg, sigma0) &&= fun (dbg, sigma0) ->
+        begin
+          try
+	    let sigma1 = match conv_t with
+              | R.CONV -> Evd.set_eq_sort env sigma0 s1 s2
+	      | R.CUMUL -> Evd.set_leq_sort env sigma0 s1 s2
+            in
+            report (Success (dbg, sigma1))
+          with Univ.UniverseInconsistency e -> 
+	    debug_str (Printf.sprintf "Type-Same exception: %s"
+		  (Pp.string_of_ppcmds (Univ.explain_universe_inconsistency Univ.Level.pr e))) 0;
+          report (Err dbg)
+        end
 
-  (* Lam-Same *)
-  | Lambda (name, t1, c1), Lambda (_, t2, c2) ->
-    let env' = Environ.push_rel (name, None, t1) env in
-    report (
-      log_eq env "Lam-Same" conv_t c c' (dbg, sigma0) &&=
-      unify_constr ts env t1 t2 &&= 
-      unify_constr ~conv_t ts env' c1 c2)
+    (* Lam-Same *)
+    | Lambda (name, t1, c1), Lambda (_, t2, c2) ->
+      let env' = Environ.push_rel (name, None, t1) env in
+      report (
+        log_eq env "Lam-Same" conv_t c c' (dbg, sigma0) &&=
+        unify_constr env t1 t2 &&= 
+        unify_constr ~conv_t env' c1 c2)
     
-  (* Prod-Same *)
-  | Prod (name, t1, c1), Prod (_, t2, c2) ->
-    report (
-      log_eq env "Prod-Same" conv_t c c' (dbg, sigma0) &&=
-      unify_constr ts env t1 t2 &&=
-      unify_constr ~conv_t ts (Environ.push_rel (name,None,t1) env) c1 c2)
+    (* Prod-Same *)
+    | Prod (name, t1, c1), Prod (_, t2, c2) ->
+      report (
+        log_eq env "Prod-Same" conv_t c c' (dbg, sigma0) &&=
+        unify_constr env t1 t2 &&=
+        unify_constr ~conv_t (Environ.push_rel (name,None,t1) env) c1 c2)
 
-  | LetIn (name, trm1, ty1, body1), LetIn (_, trm2, ty2, body2) ->
-    (* Let-Same *)
-    let env' = Environ.push_rel (name, Some trm1, ty1) env in
-    report (
-      log_eq env "Let-Same" conv_t c c' (dbg, sigma0) &&=
-      unify_constr ts env ty1 ty2 &&=
-      unify_constr ts env trm1 trm2 &&=
-      unify_constr ~conv_t ts env' body1 body2)
-          
-  (* Rigid-Same *)
-  | Rel n1, Rel n2 when n1 = n2 ->
+    | LetIn (name, trm1, ty1, body1), LetIn (_, trm2, ty2, body2) ->
+      (* Let-Same *)
+      let env' = Environ.push_rel (name, Some trm1, ty1) env in
+      report (
+        log_eq env "Let-Same" conv_t c c' (dbg, sigma0) &&=
+        unify_constr env ty1 ty2 &&=
+        unify_constr env trm1 trm2 &&=
+        unify_constr ~conv_t env' body1 body2)
+
+    (* Rigid-Same *)
+    | Rel n1, Rel n2 when n1 = n2 ->
     rigid_same ()
-  | Var id1, Var id2 when Id.equal id1 id2 ->
-    rigid_same ()
-  | Const c1, Const c2 when Univ.eq_puniverses Names.eq_constant c1 c2 ->
-    rigid_same ()
-  | Ind c1, Ind c2 when Univ.eq_puniverses Names.eq_ind c1 c2 ->
-    rigid_same ()
-  | Construct c1, Construct c2 
-    when Univ.eq_puniverses Names.eq_constructor c1 c2  ->
-    rigid_same ()
+    | Var id1, Var id2 when Id.equal id1 id2 ->
+      rigid_same ()
+    | Const c1, Const c2 when Univ.eq_puniverses Names.eq_constant c1 c2 ->
+      rigid_same ()
+    | Ind c1, Ind c2 when Univ.eq_puniverses Names.eq_ind c1 c2 ->
+      rigid_same ()
+    | Construct c1, Construct c2 
+      when Univ.eq_puniverses Names.eq_constructor c1 c2  ->
+      rigid_same ()
 
-  | CoFix (i1,(_,tys1,bds1 as recdef1)), CoFix (i2,(_,tys2,bds2))
-    when i1 = i2 ->
-    report (
-      log_eq env "CoFix-Same" conv_t c c' (dbg, sigma0) &&=
-      ise_array2 (unify_constr ts env) tys1 tys2 &&=
-      ise_array2 (unify_constr ts (Environ.push_rec_types recdef1 env)) bds1 bds2)
+    | CoFix (i1,(_,tys1,bds1 as recdef1)), CoFix (i2,(_,tys2,bds2))
+      when i1 = i2 ->
+      report (
+        log_eq env "CoFix-Same" conv_t c c' (dbg, sigma0) &&=
+        ise_array2 (unify_constr env) tys1 tys2 &&=
+        ise_array2 (unify_constr (Environ.push_rec_types recdef1 env)) bds1 bds2)
 
-  | Case (_, p1, c1, cl1), Case (_, p2, c2, cl2) ->
-    report (
-      log_eq env "Case-Same" conv_t c c' (dbg, sigma0) &&=
-      unify_constr ts env p1 p2 &&=
-      unify_constr ts env c1 c2 &&=
-      ise_array2 (unify_constr ts env) cl1 cl2)
+    | Case (_, p1, c1, cl1), Case (_, p2, c2, cl2) ->
+      report (
+        log_eq env "Case-Same" conv_t c c' (dbg, sigma0) &&=
+        unify_constr env p1 p2 &&=
+        unify_constr env c1 c2 &&=
+        ise_array2 (unify_constr env) cl1 cl2)
 
-  | Fix (li1, (_, tys1, bds1 as recdef1)), Fix (li2, (_, tys2, bds2)) 
-    when li1 = li2 ->
-    report (
-      log_eq env "Fix-Same" conv_t c c' (dbg, sigma0) &&=
-      ise_array2 (unify_constr ts env) tys1 tys2 &&=
-      ise_array2 (unify_constr ts (Environ.push_rec_types recdef1 env)) bds1 bds2)
+    | Fix (li1, (_, tys1, bds1 as recdef1)), Fix (li2, (_, tys2, bds2)) 
+      when li1 = li2 ->
+      report (
+        log_eq env "Fix-Same" conv_t c c' (dbg, sigma0) &&=
+        ise_array2 (unify_constr env) tys1 tys2 &&=
+        ise_array2 (unify_constr (Environ.push_rec_types recdef1 env)) bds1 bds2)
 
-  | _, _ -> Err dbg
+    | _, _ -> Err dbg
 
-and try_step ?(stuck=NotStucked) conv_t ts env (c, l as t) (c', l' as t') sigma0 dbg =
-  match (kind_of_term c, kind_of_term c') with
-  (* Lam-BetaR *)
-  | _, Lambda (_, _, trm) when not (CList.is_empty l') ->
-    let (c2, l2) = decompose_app (subst1 (List.hd l') trm) in
-    let t2 = (c2, l2 @ List.tl l') in
-    report (
-      log_eq_spine env "Lam-BetaR" conv_t t t' (dbg, sigma0) &&=
-      unify' ~conv_t ts env t t2)
+  and try_step ?(stuck=NotStucked) conv_t env (c, l as t) (c', l' as t') sigma0 dbg =
+    match (kind_of_term c, kind_of_term c') with
+    (* Lam-BetaR *)
+    | _, Lambda (_, _, trm) when not (CList.is_empty l') ->
+      let (c2, l2) = decompose_app (subst1 (List.hd l') trm) in
+      let t2 = (c2, l2 @ List.tl l') in
+      report (
+        log_eq_spine env "Lam-BetaR" conv_t t t' (dbg, sigma0) &&=
+        unify' ~conv_t env t t2)
 
-  | _, LetIn (_, trm, _, body) ->
-    let (c2, l2) = decompose_app (subst1 trm body) in
-    let t2 = (c2, l2 @ l') in
-    report (
-      log_eq_spine env "Let-ZetaR" conv_t t t' (dbg, sigma0) &&=
-      unify' ~conv_t ts env t t2)
+    | _, LetIn (_, trm, _, body) ->
+      let (c2, l2) = decompose_app (subst1 trm body) in
+      let t2 = (c2, l2 @ l') in
+      report (
+        log_eq_spine env "Let-ZetaR" conv_t t t' (dbg, sigma0) &&=
+        unify' ~conv_t env t t2)
 
-  | _, Case _ | _, Fix _ when stuck != StuckedRight ->
-    let t2 = evar_apprec ts env sigma0 t' in
+    | _, Case _ | _, Fix _ when stuck != StuckedRight ->
+      let t2 = evar_apprec ts env sigma0 t' in
       if not (eq_app_stack t' t2) then
         begin report (
-          log_eq_spine env "Case-IotaR" conv_t t t' (dbg, sigma0) &&=
-	  unify' ~conv_t ts env t t2)
+            log_eq_spine env "Case-IotaR" conv_t t t' (dbg, sigma0) &&=
+	    unify' ~conv_t env t t2)
 	end
       else if stuck = NotStucked then
-	try_step ~stuck:StuckedRight conv_t ts env t t' sigma0 dbg
+	try_step ~stuck:StuckedRight conv_t env t t' sigma0 dbg
       else Err dbg
 
-  (* Lam-BetaL *)
-  | Lambda (_, _, trm), _ when not (CList.is_empty l) ->
-    let (c1, l1) = decompose_app (subst1 (List.hd l) trm) in
-    let t1 = (c1, l1 @ List.tl l) in
-    report (
-      log_eq_spine env "Lam-BetaL" conv_t t t' (dbg, sigma0) &&=
-      unify' ~conv_t ts env t1 t')
-  (* Let-ZetaL *)
-  | LetIn (_, trm, _, body), _ ->
-    let (c1, l1) = decompose_app (subst1 trm body) in
-    let t1 = (c1, l1 @ l) in
-    report (
-      log_eq_spine env "Let-ZetaL" conv_t t t' (dbg, sigma0) &&=
-      unify' ~conv_t ts env t1 t')
+    (* Lam-BetaL *)
+    | Lambda (_, _, trm), _ when not (CList.is_empty l) ->
+      let (c1, l1) = decompose_app (subst1 (List.hd l) trm) in
+      let t1 = (c1, l1 @ List.tl l) in
+      report (
+        log_eq_spine env "Lam-BetaL" conv_t t t' (dbg, sigma0) &&=
+        unify' ~conv_t env t1 t')
+    (* Let-ZetaL *)
+    | LetIn (_, trm, _, body), _ ->
+      let (c1, l1) = decompose_app (subst1 trm body) in
+      let t1 = (c1, l1 @ l) in
+      report (
+        log_eq_spine env "Let-ZetaL" conv_t t t' (dbg, sigma0) &&=
+        unify' ~conv_t env t1 t')
 
-  | Case _, _ | Fix _, _ when stuck != StuckedLeft ->
-    let t2 = evar_apprec ts env sigma0 t in
+    | Case _, _ | Fix _, _ when stuck != StuckedLeft ->
+      let t2 = evar_apprec ts env sigma0 t in
       if not (eq_app_stack t t2) then
 	begin report (
           log_eq_spine env "Case-IotaL" conv_t t t' (dbg, sigma0) &&=
-	  unify' ~conv_t ts env t2 t')
+	  unify' ~conv_t env t2 t')
 	end
       else if stuck == NotStucked then
-	try_step ~stuck:StuckedLeft conv_t ts env t t' sigma0 dbg
+	try_step ~stuck:StuckedLeft conv_t env t t' sigma0 dbg
       else Err dbg
 
-  (* Constants get unfolded after everything else *)
-  | _, Const _
-  | _, Rel _
-  | _, Var _ when has_definition ts env c' && stuck == NotStucked ->
-    if is_stuck ts env sigma0 t' then
-      try_step ~stuck:StuckedRight conv_t ts env t t' sigma0 dbg
-    else report (
-      log_eq_spine env "Cons-DeltaNotStuckR" conv_t t t' (dbg, sigma0) &&=
-      unify' ~conv_t ts env t (evar_apprec ts env sigma0 (get_def_app_stack env t')))
-  | Const _, _ 
-  | Rel _, _ 
-  | Var _, _  when has_definition ts env c && stuck == StuckedRight ->
-    report (
-      log_eq_spine env "Cons-DeltaStuckL" conv_t t t'  (dbg, sigma0) &&=
-      unify' ~conv_t ts env (evar_apprec ts env sigma0 (get_def_app_stack env t)) t')
+    (* Constants get unfolded after everything else *)
+    | _, Const _
+    | _, Rel _
+    | _, Var _ when has_definition ts env c' && stuck == NotStucked ->
+      if is_stuck env sigma0 t' then
+        try_step ~stuck:StuckedRight conv_t env t t' sigma0 dbg
+      else report (
+          log_eq_spine env "Cons-DeltaNotStuckR" conv_t t t' (dbg, sigma0) &&=
+          unify' ~conv_t env t (evar_apprec ts env sigma0 (get_def_app_stack env t')))
+    | Const _, _ 
+    | Rel _, _ 
+    | Var _, _  when has_definition ts env c && stuck == StuckedRight ->
+      report (
+        log_eq_spine env "Cons-DeltaStuckL" conv_t t t'  (dbg, sigma0) &&=
+        unify' ~conv_t env (evar_apprec ts env sigma0 (get_def_app_stack env t)) t')
 
-  | _, Const _ 
-  | _, Rel _
-  | _, Var _ when has_definition ts env c' ->
-    report (
-      log_eq_spine env "Cons-DeltaR" conv_t t t' (dbg, sigma0) &&=
-      unify' ~conv_t ts env t (evar_apprec ts env sigma0 (get_def_app_stack env t')))
-  | Const _, _
-  | Rel _, _ 
-  | Var _, _  when has_definition ts env c ->
-    report (
-      log_eq_spine env "Cons-DeltaL" conv_t t t' (dbg, sigma0) &&=
-      unify' ~conv_t ts env (evar_apprec ts env sigma0 (get_def_app_stack env t)) t')
+    | _, Const _ 
+    | _, Rel _
+    | _, Var _ when has_definition ts env c' ->
+      report (
+        log_eq_spine env "Cons-DeltaR" conv_t t t' (dbg, sigma0) &&=
+        unify' ~conv_t env t (evar_apprec ts env sigma0 (get_def_app_stack env t')))
+    | Const _, _
+    | Rel _, _ 
+    | Var _, _  when has_definition ts env c ->
+      report (
+        log_eq_spine env "Cons-DeltaL" conv_t t t' (dbg, sigma0) &&=
+        unify' ~conv_t env (evar_apprec ts env sigma0 (get_def_app_stack env t)) t')
 
-  (* Lam-EtaR *)
-  | _, Lambda (name, t1, c1) when CList.is_empty l' && not (isLambda c) ->
-    report (
-      log_eq_spine env "Lam-EtaR" conv_t t t' (dbg, sigma0) &&= 
-      eta_match conv_t ts env (name, t1, c1) t)
-  (* Lam-EtaL *)
-  | Lambda (name, t1, c1), _ when CList.is_empty l && not (isLambda c') ->
-    report (
-      log_eq_spine env "Lam-EtaL" conv_t t t' (dbg, sigma0) &&=
-      eta_match conv_t ts env (name, t1, c1) t')
+    (* Lam-EtaR *)
+    | _, Lambda (name, t1, c1) when CList.is_empty l' && not (isLambda c) ->
+      report (
+        log_eq_spine env "Lam-EtaR" conv_t t t' (dbg, sigma0) &&= 
+        eta_match conv_t env (name, t1, c1) t)
+    (* Lam-EtaL *)
+    | Lambda (name, t1, c1), _ when CList.is_empty l && not (isLambda c') ->
+      report (
+        log_eq_spine env "Lam-EtaL" conv_t t t' (dbg, sigma0) &&=
+        eta_match conv_t env (name, t1, c1) t')
 
-  | _, _ -> Err dbg
+    | _, _ -> Err dbg
 
-and is_stuck ts env sigma (hd, args) =
-  let (hd, args) = evar_apprec ts env sigma (try_unfolding ts env hd, args) in
-  let rec is_unnamed (hd, args) = match kind_of_term hd with
-    | (Var _|Construct _|Ind _|Const _|Prod _|Sort _) -> false
-    | (Case _|Fix _|CoFix _|Meta _|Rel _)-> true
-    | Evar _ -> false (* immediate solution without Canon Struct *)
-    | Lambda _ -> assert(args = []); true
-    | LetIn (_, b, _, c) -> is_unnamed (evar_apprec ts env sigma (subst1 b c, args))
-    | Proj (p, c) -> false
-    | App _| Cast _ -> assert false
-  in is_unnamed (hd, args)
-    
-and remove_equal_tail (h, args) (h', args') =
-  let rargs = List.rev args in
-  let rargs' = List.rev args' in
-  let noccur i xs ys =
-    not (Termops.occur_term i h')
-    && not (Termops.occur_term i h)
-    && not (List.exists (Termops.occur_term i) ys)
-    && not (List.exists (Termops.occur_term i) xs) in
-  let rec remove rargs rargs' =
-    match rargs, rargs' with
-    | (x :: xs), (y :: ys) when eq_constr x y && noccur x xs ys -> remove xs ys
-    | _, _ -> rargs, rargs'
-  in 
-  let (xs, ys) = remove rargs rargs' in
+  and is_stuck env sigma (hd, args) =
+    let (hd, args) = evar_apprec ts env sigma (try_unfolding ts env hd, args) in
+    let rec is_unnamed (hd, args) = match kind_of_term hd with
+      | (Var _|Construct _|Ind _|Const _|Prod _|Sort _) -> false
+      | (Case _|Fix _|CoFix _|Meta _|Rel _)-> true
+      | Evar _ -> false (* immediate solution without Canon Struct *)
+      | Lambda _ -> assert(args = []); true
+      | LetIn (_, b, _, c) -> is_unnamed (evar_apprec ts env sigma (subst1 b c, args))
+      | Proj (p, c) -> false
+      | App _| Cast _ -> assert false
+    in is_unnamed (hd, args)
+
+  and remove_equal_tail (h, args) (h', args') =
+    let rargs = List.rev args in
+    let rargs' = List.rev args' in
+    let noccur i xs ys =
+      not (Termops.occur_term i h')
+      && not (Termops.occur_term i h)
+      && not (List.exists (Termops.occur_term i) ys)
+      && not (List.exists (Termops.occur_term i) xs) in
+    let rec remove rargs rargs' =
+      match rargs, rargs' with
+      | (x :: xs), (y :: ys) when eq_constr x y && noccur x xs ys -> remove xs ys
+      | _, _ -> rargs, rargs'
+    in 
+    let (xs, ys) = remove rargs rargs' in
     (List.rev xs, List.rev ys)
 
-(* pre: args and args' are lists of vars and/or rels. subs is an array of rels and vars. *) 
-and instantiate' ts dir conv_t env (ev, subs as uv) args (h, args') (dbg, sigma0) =
-  let args, args' = remove_equal_tail (mkEvar uv, args) (h, args') in
-  (* beta-reduce to remove dependencies *)
-  let t = RO.whd_beta sigma0 (applist (h, args')) in
-  let evi = Evd.find_undefined sigma0 ev in
-  let nc = Evd.evar_filtered_context evi in
-  let res = 
-    let subsl = Array.to_list subs in
+  (* pre: args and args' are lists of vars and/or rels. subs is an array of rels and vars. *) 
+  and instantiate' dir conv_t env (ev, subs as uv) args (h, args') (dbg, sigma0) =
+    let args, args' = remove_equal_tail (mkEvar uv, args) (h, args') in
+    (* beta-reduce to remove dependencies *)
+    let t = RO.whd_beta sigma0 (applist (h, args')) in
+    let evi = Evd.find_undefined sigma0 ev in
+    let nc = Evd.evar_filtered_context evi in
+    let res = 
+      let subsl = Array.to_list subs in
       invert Evar.Map.empty sigma0 nc t subsl args ev >>= fun (map, t') ->
       fill_lambdas_invert_types map env sigma0 nc t' subsl args ev >>= fun (map, t') ->
-        let sigma1 = prune_all map sigma0 in
-	let t' = Evarutil.nf_evar sigma1 t' in
-	let sigma1, t' = 
-	  Evarsolve.refresh_universes
+      let sigma1 = prune_all map sigma0 in
+      let t' = Evarutil.nf_evar sigma1 t' in
+      let sigma1, t' = 
+	Evarsolve.refresh_universes
 	    (if conv_t == R.CUMUL && isArity t' then
 	      (* ?X <= Type(i) -> X := Type j, j <= i *)
 	      (* Type(i) <= X -> X := Type j, i <= j *)
 	      Some (dir == Original) 
 	   else None)
 	    (Environ.push_named_context nc env) sigma1 t' in
-	let t'' = instantiate_evar nc t' subsl in
-	let ty = Evd.existential_type sigma1 uv in
-	let unifty = 
-	  try 
-	    match kind_of_term t'' with
-	    | Evar (evk2, _) ->
-              (* ?X : Π Δ. Type i = ?Y : Π Δ'. Type j.
-		 The body of ?X and ?Y just has to be of type Π Δ. Type k for some k <= i, j. *)
-	      let evienv = Evd.evar_env evi in
-	      let ctx1, i = R.dest_arity evienv evi.Evd.evar_concl in
-	      let evi2 = Evd.find sigma1 evk2 in
-	      let evi2env = Evd.evar_env evi2 in
-	      let ctx2, j = R.dest_arity evi2env evi2.Evd.evar_concl in
-	      let ui, uj = univ_of_sort i, univ_of_sort j in
-		if i == j || Evd.check_eq sigma1 ui uj
-		then (* Shortcut, i = j *) 
-		  Success (dbg, sigma1)
-		else if Evd.check_leq sigma1 ui uj then
-		  let t2 = it_mkProd_or_LetIn (mkSort i) ctx2 in
-		    Success (dbg, Evd.downcast evk2 t2 sigma1)
-		else if Evd.check_leq sigma1 uj ui then
-		  let t1 = it_mkProd_or_LetIn (mkSort j) ctx1 in
-		    Success (dbg, Evd.downcast ev t1 sigma1)
-		else
-		  let sigma1, k = Evd.new_sort_variable Evd.univ_flexible_alg sigma1 in
-		  let t1 = it_mkProd_or_LetIn (mkSort k) ctx1 in
-		  let t2 = it_mkProd_or_LetIn (mkSort k) ctx2 in
-		  let sigma1 = Evd.set_leq_sort env (Evd.set_leq_sort env sigma1 k i) k j in
-		    Success (dbg, Evd.downcast evk2 t2 (Evd.downcast ev t1 sigma1))
-	    | _ -> raise R.NotArity
+      let t'' = instantiate_evar nc t' subsl in
+      let ty = Evd.existential_type sigma1 uv in
+      let unifty = 
+	try 
+	  match kind_of_term t'' with
+	  | Evar (evk2, _) ->
+            (* ?X : Π Δ. Type i = ?Y : Π Δ'. Type j.
+	       The body of ?X and ?Y just has to be of type Π Δ. Type k for some k <= i, j. *)
+	    let evienv = Evd.evar_env evi in
+	    let ctx1, i = R.dest_arity evienv evi.Evd.evar_concl in
+	    let evi2 = Evd.find sigma1 evk2 in
+	    let evi2env = Evd.evar_env evi2 in
+	    let ctx2, j = R.dest_arity evi2env evi2.Evd.evar_concl in
+	    let ui, uj = univ_of_sort i, univ_of_sort j in
+	    if i == j || Evd.check_eq sigma1 ui uj then (* Shortcut, i = j *) 
+	      Success (dbg, sigma1)
+	    else if Evd.check_leq sigma1 ui uj then
+              let t2 = it_mkProd_or_LetIn (mkSort i) ctx2 in
+	      Success (dbg, Evd.downcast evk2 t2 sigma1)
+            else if Evd.check_leq sigma1 uj ui then
+	      let t1 = it_mkProd_or_LetIn (mkSort j) ctx1 in
+              Success (dbg, Evd.downcast ev t1 sigma1)
+	    else
+              let sigma1, k = Evd.new_sort_variable Evd.univ_flexible_alg sigma1 in
+	      let t1 = it_mkProd_or_LetIn (mkSort k) ctx1 in
+	      let t2 = it_mkProd_or_LetIn (mkSort k) ctx2 in
+	      let sigma1 = Evd.set_leq_sort env (Evd.set_leq_sort env sigma1 k i) k j in
+	      Success (dbg, Evd.downcast evk2 t2 (Evd.downcast ev t1 sigma1))
+	  | _ -> raise R.NotArity
 	  with R.NotArity ->
 	    let ty' = Retyping.get_type_of env sigma1 t'' in
-	      unify_constr ~conv_t:R.CUMUL ts env ty' ty (dbg, sigma1)
+	      unify_constr ~conv_t:R.CUMUL env ty' ty (dbg, sigma1)
 	in
 	let p = unifty &&= fun (dbg, sigma2) ->
 	  let t' = RO.nf_evar sigma2 t' in
@@ -1202,127 +1207,138 @@ and instantiate' ts dir conv_t env (ev, subs as uv) args (h, args') (dbg, sigma0
 	       Success (dbg, Evd.define ev t' sigma2))
 	in
 	  Some p
-  in
+    in
     match res with
     | Some r -> r
     | None -> Err dbg
-    
-and meta_inst dir ts conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
+
+  and meta_inst dir conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
     if is_variable_subs subs && is_variable_args args then
       begin
         try 
           report (log_eq_spine env "Meta-Inst" conv_t (mkEvar evsubs, args) t (dbg, sigma) &&=
-                  instantiate' ts dir conv_t env evsubs args t)
+                  instantiate' dir conv_t env evsubs args t)
         with CannotPrune -> report (Err dbg)
       end
     else Err dbg
 
-and meta_deldeps dir ts conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
-  if is_aggressive () then
-    begin
-      try 
-	let (sigma', evsubs', args'') = remove_non_var env sigma evsubs args in 
-        report (
-          log_eq_spine env "Meta-DelDeps" conv_t (mkEvar evsubs, args) t (dbg, sigma') &&=
-          switch dir (unify' ~conv_t ts env) (evsubs', args'') t)
-      with CannotPrune -> Err dbg
-    end
-  else Err dbg
-
-and meta_specialize dir ts conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
-  if !super_aggressive then
-    begin
-      try
-        let (sigma', evsubst', args'') = specialize_evar env sigma evsubs args in 
-        report (
-          log_eq_spine env "Meta-Specialize" conv_t (mkEvar evsubs, args) t (dbg, sigma') &&=
-          switch dir (unify' ~conv_t ts env) (evsubst', args'') t)
-      with CannotPrune -> Err dbg
-    end
-  else Err dbg
-
-and meta_reduce dir ts conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
-  (* Meta-Reduce: before giving up we see if we can reduce on the right *)
-  if has_definition ts env h then
-    begin
-      let t' = evar_apprec ts env sigma (get_def_app_stack env t) in 
-      report (
-        log_eq_spine env "Meta-Reduce" conv_t (mkEvar evsubs, args) t (dbg, sigma) &&=
-        switch dir (unify' ~conv_t ts env) (mkEvar evsubs, args) t')
-    end
-  else
-    begin
-      let t' = evar_apprec ts env sigma t in
-      if not (eq_app_stack t t') then
-        begin 
+  and meta_deldeps dir conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
+    if is_aggressive () then
+      begin
+        try 
+	  let (sigma', evsubs', args'') = remove_non_var env sigma evsubs args in 
           report (
-            log_eq_spine env "Meta-Reduce" conv_t (mkEvar evsubs, args) t (dbg, sigma) &&=
-            switch dir (unify' ~conv_t ts env) (mkEvar evsubs, args) t')
-        end
-      else Err dbg
-    end
+            log_eq_spine env "Meta-DelDeps" conv_t (mkEvar evsubs, args) t (dbg, sigma') &&=
+            switch dir (unify' ~conv_t env) (evsubs', args'') t)
+        with CannotPrune -> Err dbg
+      end
+    else Err dbg
+
+  and meta_specialize dir conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
+    if !super_aggressive then
+      begin
+        try
+          let (sigma', evsubst', args'') = specialize_evar env sigma evsubs args in
+          report (
+            log_eq_spine env "Meta-Specialize" conv_t (mkEvar evsubs, args) t (dbg, sigma') &&=
+            switch dir (unify' ~conv_t env) (evsubst', args'') t)
+        with CannotPrune -> Err dbg
+      end
+    else Err dbg
+
+  and meta_reduce dir conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
+    (* Meta-Reduce: before giving up we see if we can reduce on the right *)
+    if has_definition ts env h then
+      begin
+        let t' = evar_apprec ts env sigma (get_def_app_stack env t) in 
+        report (
+          log_eq_spine env "Meta-Reduce" conv_t (mkEvar evsubs, args) t (dbg, sigma) &&=
+          switch dir (unify' ~conv_t env) (mkEvar evsubs, args) t')
+      end
+    else
+      begin
+        let t' = evar_apprec ts env sigma t in
+        if not (eq_app_stack t t') then
+          begin 
+            report (
+              log_eq_spine env "Meta-Reduce" conv_t (mkEvar evsubs, args) t (dbg, sigma) &&=
+              switch dir (unify' ~conv_t env) (mkEvar evsubs, args) t')
+          end
+        else Err dbg
+      end
     
-and meta_eta dir ts conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
-  (* if the equation is [?f =?= \x.?f x] the occurs check will fail, but there is a solution: eta expansion *)
-  if isLambda h && List.length args' = 0 then
-    begin 
-      report (
-        log_eq_spine env "Lam-Eta" conv_t (mkEvar evsubs, args) t (dbg, sigma) &&=
-        eta_match conv_t  ts env (destLambda h) (mkEvar evsubs, args))
-    end
-  else
-    Err dbg
+  and meta_eta dir conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
+    (* if the equation is [?f =?= \x.?f x] the occurs check will fail, but there is a solution: eta expansion *)
+    if isLambda h && List.length args' = 0 then
+      begin 
+        report (
+          log_eq_spine env "Lam-Eta" conv_t (mkEvar evsubs, args) t (dbg, sigma) &&=
+          eta_match conv_t env (destLambda h) (mkEvar evsubs, args))
+      end
+    else
+      Err dbg
 
-(* by invariant, we know that ev is uninstantiated *)
-and instantiate ?(dir=Original) ts conv_t env 
-    (_, _ as evsubs) (h, args' as t) sigma dbg =
-  meta_inst dir ts conv_t env evsubs t sigma dbg
-  ||= meta_fo dir conv_t ts env evsubs t sigma
-  ||= meta_deldeps dir ts conv_t env evsubs t sigma
-  ||= meta_specialize dir ts conv_t env evsubs t sigma
-  ||= meta_reduce dir ts conv_t env evsubs t sigma
-  ||= meta_eta dir ts conv_t env evsubs t sigma
-  ||= try_solve_simple_eqn ts conv_t env evsubs t sigma
-      
-and should_try_fo args (h, args') =
-  List.length args > 0 && List.length args' >= List.length args
+  (* by invariant, we know that ev is uninstantiated *)
+  and instantiate ?(dir=Original) conv_t env 
+      (_, _ as evsubs) (h, args' as t) sigma dbg =
+    meta_inst dir conv_t env evsubs t sigma dbg
+    ||= meta_fo dir conv_t env evsubs t sigma
+    ||= meta_deldeps dir conv_t env evsubs t sigma
+    ||= meta_specialize dir conv_t env evsubs t sigma
+    ||= meta_reduce dir conv_t env evsubs t sigma
+    ||= meta_eta dir conv_t env evsubs t sigma
+    ||= try_solve_simple_eqn conv_t env evsubs t sigma
 
-(* ?e a1 a2 = h b1 b2 b3 ---> ?e = h b1 /\ a1 = b2 /\ a2 = b3 *)
-and meta_fo dir conv_t ts env (evsubs, args) (h, args' as t) sigma dbg =
-  if not (should_try_fo args t) then Err dbg
-  else
-    let (args'1,args'2) =
-      CList.chop (List.length args'-List.length args) args' in
-    begin report (
-        (* Meta-FO *)
-        log_eq_spine env "Meta-FO" conv_t (mkEvar evsubs, args) 
-          t (dbg, sigma) &&= fun (dbg, sigma) ->
-          if dir = Original then 
-            unify' ts ~conv_t env (mkEvar evsubs, []) (h, args'1) (dbg, sigma) &&= 
-            ise_list2 (unify_constr ts env) args args'2
-          else
-            unify' ts ~conv_t env (h, args'1) (mkEvar evsubs, []) (dbg, sigma) &&=
-            ise_list2 (unify_constr ts env) args'2 args
-      ) end
+  and should_try_fo args (h, args') =
+    List.length args > 0 && List.length args' >= List.length args
 
-(* unifies ty with a product type from {name : a} to some Type *)
-and check_product dbg ts env sigma ty (name, a) =
-  let nc = Environ.named_context env in
-  let naid = Namegen.next_name_away name (Termops.ids_of_named_context nc) in
-  let nc' = (naid, None, a) :: nc in
-  let sigma', univ = Evd.new_univ_variable Evd.univ_flexible sigma in
-  let evi = Evd.make_evar (Environ.val_of_named_context nc') (mkType univ) in 
-  let sigma'',v = Evarutil.new_pure_evar_full sigma' evi in
-  let idsubst = Array.of_list (mkRel 1 :: id_substitution nc) in
-    unify_constr ~conv_t:R.CUMUL ts env ty (mkProd (Names.Name naid, a, mkEvar(v, idsubst))) (dbg, sigma'')
+  (* ?e a1 a2 = h b1 b2 b3 ---> ?e = h b1 /\ a1 = b2 /\ a2 = b3 *)
+  and meta_fo dir conv_t env (evsubs, args) (h, args' as t) sigma dbg =
+    if not (should_try_fo args t) then Err dbg
+    else
+      let (args'1,args'2) =
+        CList.chop (List.length args'-List.length args) args' in
+      begin report (
+          (* Meta-FO *)
+          log_eq_spine env "Meta-FO" conv_t (mkEvar evsubs, args) 
+            t (dbg, sigma) &&= fun (dbg, sigma) ->
+            if dir = Original then 
+              unify' ~conv_t env (mkEvar evsubs, []) (h, args'1) (dbg, sigma) &&= 
+              ise_list2 (unify_constr env) args args'2
+            else
+              unify' ~conv_t env (h, args'1) (mkEvar evsubs, []) (dbg, sigma) &&=
+              ise_list2 (unify_constr env) args'2 args
+        ) end
 
-and eta_match conv_t ts env (name, a, t1) (th, tl as t) (dbg, sigma0 ) =
-  let env' = Environ.push_rel (name, None, a) env in
-  let t' = applist (lift 1 th, List.map (lift 1) tl @ [mkRel 1]) in
-  let ty = Retyping.get_type_of env sigma0 (applist t) in
-    check_product dbg ts env sigma0 ty (name, a) &&=
-      unify_constr ~conv_t ts env' t1 t'
+  (* unifies ty with a product type from {name : a} to some Type *)
+  and check_product dbg env sigma ty (name, a) =
+    let nc = Environ.named_context env in
+    let naid = Namegen.next_name_away name (Termops.ids_of_named_context nc) in
+    let nc' = (naid, None, a) :: nc in
+    let sigma', univ = Evd.new_univ_variable Evd.univ_flexible sigma in
+    let evi = Evd.make_evar (Environ.val_of_named_context nc') (mkType univ) in 
+    let sigma'',v = Evarutil.new_pure_evar_full sigma' evi in
+    let idsubst = Array.of_list (mkRel 1 :: id_substitution nc) in
+    unify_constr ~conv_t:R.CUMUL env ty (mkProd (Names.Name naid, a, mkEvar(v, idsubst))) (dbg, sigma'')
+
+  and eta_match conv_t env (name, a, t1) (th, tl as t) (dbg, sigma0 ) =
+    let env' = Environ.push_rel (name, None, a) env in
+    let t' = applist (lift 1 th, List.map (lift 1) tl @ [mkRel 1]) in
+    let ty = Retyping.get_type_of env sigma0 (applist t) in
+    check_product dbg env sigma0 ty (name, a) &&=
+    unify_constr ~conv_t env' t1 t'
+end
   
+let unify_evar_conv ts =
+  let module P = (struct let ts = ts end : Params) in
+  let module M = Unif(P) in
+  M.unify_evar_conv
+
+let unify_constr ts =
+  let module P = (struct let ts = ts end : Params) in
+  let module M = Unif(P) in
+  M.unify_constr
+
 let use_munify () = !munify_on
 let set_use_munify b = 
   if b then try Evarconv.set_evar_conv unify_evar_conv with _ -> ();  
