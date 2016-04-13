@@ -22,16 +22,15 @@ open Proofview
 open Notations
 open Munify
 
-module P = Pretyping
-
 let understand env sigma {Glob_term.closure=closure;term=term} =
-  let flags = P.all_no_fail_flags in
-  let lvar = { P.empty_lvar with
-               P.ltac_constrs = closure.Glob_term.typed;
-               P.ltac_uconstrs = closure.Glob_term.untyped;
-               P.ltac_idents = closure.Glob_term.idents;
+  let open Pretyping in
+  let flags = all_no_fail_flags in
+  let lvar = { empty_lvar with
+               ltac_constrs = closure.Glob_term.typed;
+               ltac_uconstrs = closure.Glob_term.untyped;
+               ltac_idents = closure.Glob_term.idents;
              } in
-  P.understand_ltac flags env sigma lvar P.WithoutTypeConstraint term
+  understand_ltac flags env sigma lvar WithoutTypeConstraint term
 
 let munify_tac gl sigma ismatch x y =
   let env = Goal.env gl in
