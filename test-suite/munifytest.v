@@ -30,11 +30,24 @@ Unset Unicoq Super Aggressive.
 (* This one should fail *)
 Fail Definition test5 (x:nat) : _ x x = S x := eq_refl.
 
-Goal True.
-  munify 0 0.
+Goal forall x y : nat, True.
+  intros.
+  mmatch 0 0.
   Fail munify 0 1.
+Set Unicoq Dump Equalities.
+  evar (X : nat).
+  munify 0 X.
+  mmatch X 0.
+  mmatch (S _) (1 + 0).
+  mmatch (S _) (0 + (fun x=>x) 1).
+  Fail mmatch (0 + (fun x=>x) _) 1.
+  mmatch _ 0.
+  mmatch (_ X) 0.
+  mmatch (_ X X) X. (* works because meta-reduce changes the rhs to 0 *)
+  Fail mmatch (_ x x) _.
+  munify (_ x x) _.
   exact I.
-Qed.
+Abort.
 
 
 Unset Unicoq Debug.

@@ -22,13 +22,25 @@ open Proofview
 open Notations
 open Munify
 
-let munify_tac gl x y =
+module P = Pretyping
+
+let understand env sigma {Glob_term.closure=closure;term=term} =
+  let flags = P.all_no_fail_flags in
+  let lvar = { P.empty_lvar with
+               P.ltac_constrs = closure.Glob_term.typed;
+               P.ltac_uconstrs = closure.Glob_term.untyped;
+               P.ltac_idents = closure.Glob_term.idents;
+             } in
+  P.understand_ltac flags env sigma lvar P.WithoutTypeConstraint term
+
+let munify_tac gl sigma ismatch x y =
   let env = Goal.env gl in
-  let sigma = Goal.sigma gl in
   let evars evm = V82.tactic (Refiner.tclEVARS evm) in
+  let (sigma, x) = understand env sigma x in
+  let (sigma, y) = understand env sigma y in
   let res = 
     let ts = Conv_oracle.get_transp_state (Environ.oracle env) in
-    unify_evar_conv ts env sigma Reduction.CUMUL x y in
+    unify_evar_conv ~ismatch:ismatch ts env sigma Reduction.CUMUL x y in
     match res with
     | Evarsolve.Success evm -> evars evm
     | Evarsolve.UnifFailure _ -> Tacticals.New.tclFAIL 0 (str"Unification failed")
@@ -37,12 +49,25 @@ let munify_tac gl x y =
    Tactic Notation does. *)
 
 TACTIC EXTEND munify_tac
-| ["munify" constr(c) constr(c') ] ->
+| ["munify" uconstr(c) uconstr(c') ] ->
   [ Proofview.Goal.enter begin fun gl ->
-    let gl = Proofview.Goal.assume gl in
-      munify_tac gl c c'
-  end
-    ]
+        let gl = Proofview.Goal.assume gl in
+        let sigma = Goal.sigma gl in
+        munify_tac gl sigma false c c'
+      end
+  ]
+END
+
+
+TACTIC EXTEND mmatch_tac
+| ["mmatch" uconstr(c) uconstr(c') ] ->
+  [ Proofview.Goal.enter begin fun gl ->
+        let gl = Proofview.Goal.assume gl in
+        let env = Proofview.Goal.env gl in
+        let sigma = Proofview.Goal.sigma gl in
+        munify_tac gl sigma true c c'
+      end
+  ]
 END
 
 VERNAC COMMAND EXTEND PrintMunifyStats CLASSIFIED AS SIDEFF
