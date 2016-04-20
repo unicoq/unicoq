@@ -39,10 +39,15 @@ let munify_tac gl sigma ismatch x y =
   let (sigma, y) = understand env sigma y in
   let res = 
     let ts = Conv_oracle.get_transp_state (Environ.oracle env) in
-    unify_evar_conv ~ismatch:ismatch ts env sigma Reduction.CUMUL x y in
-    match res with
-    | Evarsolve.Success evm -> evars evm
-    | Evarsolve.UnifFailure _ -> Tacticals.New.tclFAIL 0 (str"Unification failed")
+    if ismatch then
+      let evars = Evd.fold (fun e _->Evar.Set.add e) sigma Evar.Set.empty in
+      unify_match evars ts env sigma Reduction.CONV x y
+    else
+      unify_evar_conv ts env sigma Reduction.CUMUL x y
+  in
+  match res with
+  | Evarsolve.Success evm -> evars evm
+  | Evarsolve.UnifFailure _ -> Tacticals.New.tclFAIL 0 (str"Unification failed")
 
 (* This adds an entry to the grammar of tactics, similar to what
    Tactic Notation does. *)

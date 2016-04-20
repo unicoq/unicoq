@@ -719,13 +719,32 @@ let specialize_evar env sigma (ev, subs) args =
 exception InternalException
 
 (** {2 The function} *)
+type thedir = Left | Right | Both
+
 module type Params = sig
   val ts : Names.transparent_state
-  val ismatch : bool
+  val wreduce : thedir
+  val winst : thedir
+  val match_evars : Evar.Set.t
+end
+(*
+module type UnifType = functor (P : Params) -> sig
+  val unify_evar_conv : Evarsolve.conv_fun
+end
+*)
+module type UnifT = functor (P : Params) -> sig
+  val unify_constr : ?conv_t:R.conv_pb ->
+    Environ.env ->
+    Term.constr -> Term.constr -> Logger.log * Evd.evar_map -> unif
 end
 
-module Unif (P : Params) = struct
+module Unif = functor (M : UnifT) (P : Params) -> struct
   open P
+
+  let swap_match = function
+    | Left -> Right
+    | Right -> Left
+    | Both -> Both
 
   (** Enum type indicating where it is useless to reduce. *)
   type stucked = NotStucked | StuckedLeft | StuckedRight
@@ -735,7 +754,14 @@ module Unif (P : Params) = struct
 
   let switch dir f t u = if dir == Original then f t u else f u t
 
-  let right_match dir = not ismatch || dir == Original
+  let must_inst dir e =
+    winst == Both
+    || (winst == Left && dir == Original && Evar.Set.mem e match_evars)
+    || (winst == Right && dir == Swap && Evar.Set.mem e match_evars)
+
+  let reduce_left = wreduce == Left || wreduce == Both
+
+  let reduce_right = wreduce == Right || wreduce == Both
 
   (** {3 Hashing table of failures} *)
   let tbl = Hashtbl.create 1000
@@ -1037,21 +1063,21 @@ module Unif (P : Params) = struct
   and try_step ?(stuck=NotStucked) conv_t env (c, l as t) (c', l' as t') sigma0 dbg =
     match (kind_of_term c, kind_of_term c') with
     (* Lam-BetaR *)
-    | _, Lambda (_, _, trm) when not (CList.is_empty l') ->
+    | _, Lambda (_, _, trm) when reduce_right && not (CList.is_empty l') ->
       let (c2, l2) = decompose_app (subst1 (List.hd l') trm) in
       let t2 = (c2, l2 @ List.tl l') in
       report (
         log_eq_spine env "Lam-BetaR" conv_t t t' (dbg, sigma0) &&=
         unify' ~conv_t env t t2)
 
-    | _, LetIn (_, trm, _, body) ->
+    | _, LetIn (_, trm, _, body) when reduce_right ->
       let (c2, l2) = decompose_app (subst1 trm body) in
       let t2 = (c2, l2 @ l') in
       report (
         log_eq_spine env "Let-ZetaR" conv_t t t' (dbg, sigma0) &&=
         unify' ~conv_t env t t2)
 
-    | _, Case _ | _, Fix _ when stuck != StuckedRight ->
+    | _, Case _ | _, Fix _ when reduce_right && stuck != StuckedRight ->
       let t2 = evar_apprec ts env sigma0 t' in
       if not (eq_app_stack t' t2) then
         begin report (
@@ -1063,21 +1089,21 @@ module Unif (P : Params) = struct
       else Err dbg
 
     (* Lam-BetaL *)
-    | Lambda (_, _, trm), _ when not ismatch && not (CList.is_empty l) ->
+    | Lambda (_, _, trm), _ when reduce_left && not (CList.is_empty l) ->
       let (c1, l1) = decompose_app (subst1 (List.hd l) trm) in
       let t1 = (c1, l1 @ List.tl l) in
       report (
         log_eq_spine env "Lam-BetaL" conv_t t t' (dbg, sigma0) &&=
         unify' ~conv_t env t1 t')
     (* Let-ZetaL *)
-    | LetIn (_, trm, _, body), _ when not ismatch ->
+    | LetIn (_, trm, _, body), _ when reduce_left ->
       let (c1, l1) = decompose_app (subst1 trm body) in
       let t1 = (c1, l1 @ l) in
       report (
         log_eq_spine env "Let-ZetaL" conv_t t t' (dbg, sigma0) &&=
         unify' ~conv_t env t1 t')
 
-    | Case _, _ | Fix _, _ when not ismatch && stuck != StuckedLeft ->
+    | Case _, _ | Fix _, _ when reduce_left && stuck != StuckedLeft ->
       let t2 = evar_apprec ts env sigma0 t in
       if not (eq_app_stack t t2) then
 	begin report (
@@ -1091,7 +1117,7 @@ module Unif (P : Params) = struct
     (* Constants get unfolded after everything else *)
     | _, Const _
     | _, Rel _
-    | _, Var _ when has_definition ts env c' && stuck == NotStucked ->
+    | _, Var _ when reduce_right && has_definition ts env c' && stuck == NotStucked ->
       if is_stuck env sigma0 t' then
         try_step ~stuck:StuckedRight conv_t env t t' sigma0 dbg
       else report (
@@ -1099,31 +1125,31 @@ module Unif (P : Params) = struct
           unify' ~conv_t env t (evar_apprec ts env sigma0 (get_def_app_stack env t')))
     | Const _, _ 
     | Rel _, _ 
-    | Var _, _  when not ismatch && has_definition ts env c && stuck == StuckedRight ->
+    | Var _, _  when reduce_left && has_definition ts env c && stuck == StuckedRight ->
       report (
         log_eq_spine env "Cons-DeltaStuckL" conv_t t t'  (dbg, sigma0) &&=
         unify' ~conv_t env (evar_apprec ts env sigma0 (get_def_app_stack env t)) t')
 
     | _, Const _ 
     | _, Rel _
-    | _, Var _ when has_definition ts env c' ->
+    | _, Var _ when reduce_right && has_definition ts env c' ->
       report (
         log_eq_spine env "Cons-DeltaR" conv_t t t' (dbg, sigma0) &&=
         unify' ~conv_t env t (evar_apprec ts env sigma0 (get_def_app_stack env t')))
     | Const _, _
     | Rel _, _ 
-    | Var _, _  when not ismatch && has_definition ts env c ->
+    | Var _, _  when reduce_left && has_definition ts env c ->
       report (
         log_eq_spine env "Cons-DeltaL" conv_t t t' (dbg, sigma0) &&=
         unify' ~conv_t env (evar_apprec ts env sigma0 (get_def_app_stack env t)) t')
 
     (* Lam-EtaR *)
-    | _, Lambda (name, t1, c1) when CList.is_empty l' && not (isLambda c) ->
+    | _, Lambda (name, t1, c1) when reduce_right && CList.is_empty l' && not (isLambda c) ->
       report (
         log_eq_spine env "Lam-EtaR" conv_t t t' (dbg, sigma0) &&= 
         eta_match conv_t env (name, t1, c1) t)
     (* Lam-EtaL *)
-    | Lambda (name, t1, c1), _ when not ismatch && CList.is_empty l && not (isLambda c') ->
+    | Lambda (name, t1, c1), _ when reduce_left && CList.is_empty l && not (isLambda c') ->
       report (
         log_eq_spine env "Lam-EtaL" conv_t t t' (dbg, sigma0) &&=
         eta_match conv_t env (name, t1, c1) t')
@@ -1158,7 +1184,7 @@ module Unif (P : Params) = struct
     let (xs, ys) = remove rargs rargs' in
     (List.rev xs, List.rev ys)
 
-  (* pre: args and args' are lists of vars and/or rels. subs is an array of rels and vars. *) 
+  (* pre: args and args' are lists of vars and/or rels. subs is an array of rels and vars. *)
   and instantiate' dir conv_t env (ev, subs as uv) args (h, args') (dbg, sigma0) =
     let args, args' = remove_equal_tail (mkEvar uv, args) (h, args') in
     (* beta-reduce to remove dependencies *)
@@ -1210,10 +1236,14 @@ module Unif (P : Params) = struct
 	  | _ -> raise R.NotArity
 	  with R.NotArity ->
 	    let ty' = Retyping.get_type_of env sigma1 t'' in
-            if ismatch then
-              unify_constr env ty ty' (dbg, sigma1) (* CONV *)
-            else
-	      unify_constr ~conv_t:R.CUMUL env ty' ty (dbg, sigma1)
+            let module P = (struct
+              let ts = ts
+              let wreduce = Both
+              let winst = Both
+              let match_evars = Evar.Set.empty
+            end : Params) in
+           let module M' = M(P) in
+           M'.unify_constr ~conv_t:R.CUMUL env ty' ty (dbg, sigma1)
 	in
 	let p = unifty &&= fun (dbg, sigma2) ->
 	  let t' = RO.nf_evar sigma2 t' in
@@ -1230,7 +1260,7 @@ module Unif (P : Params) = struct
     | None -> Err dbg
 
   and meta_inst dir conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
-    if right_match dir && is_variable_subs subs && is_variable_args args then
+    if must_inst dir ev && is_variable_subs subs && is_variable_args args then
       begin
         try 
           report (log_eq_spine env "Meta-Inst" conv_t (mkEvar evsubs, args) t (dbg, sigma) &&=
@@ -1240,7 +1270,7 @@ module Unif (P : Params) = struct
     else Err dbg
 
   and meta_deldeps dir conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
-    if is_aggressive () && right_match dir then
+    if is_aggressive () && must_inst dir ev then
       begin
         try 
 	  let (sigma', evsubs', args'') = remove_non_var env sigma evsubs args in 
@@ -1252,7 +1282,7 @@ module Unif (P : Params) = struct
     else Err dbg
 
   and meta_specialize dir conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
-    if !super_aggressive && right_match dir then
+    if !super_aggressive && must_inst dir ev then
       begin
         try
           let (sigma', evsubst', args'') = specialize_evar env sigma evsubs args in
@@ -1265,7 +1295,7 @@ module Unif (P : Params) = struct
 
   and meta_reduce dir conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
     (* Meta-Reduce: before giving up we see if we can reduce on the right *)
-    if right_match dir then
+    if must_inst dir ev then
       if has_definition ts env h then
         begin
           let t' = evar_apprec ts env sigma (get_def_app_stack env t) in 
@@ -1289,7 +1319,7 @@ module Unif (P : Params) = struct
 
   and meta_eta dir conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
     (* if the equation is [?f =?= \x.?f x] the occurs check will fail, but there is a solution: eta expansion *)
-    if right_match dir && isLambda h && List.length args' = 0 then
+    if must_inst dir ev && isLambda h && List.length args' = 0 then
       begin 
         report (
           log_eq_spine env "Lam-Eta" conv_t (mkEvar evsubs, args) t (dbg, sigma) &&=
@@ -1313,8 +1343,8 @@ module Unif (P : Params) = struct
     List.length args > 0 && List.length args' >= List.length args
 
   (* ?e a1 a2 = h b1 b2 b3 ---> ?e = h b1 /\ a1 = b2 /\ a2 = b3 *)
-  and meta_fo dir conv_t env (evsubs, args) (h, args' as t) sigma dbg =
-    if not (should_try_fo args t) || not (right_match dir) then Err dbg
+  and meta_fo dir conv_t env ((ev, _ as evsubs), args) (h, args' as t) sigma dbg =
+    if not (should_try_fo args t) || not (must_inst dir ev) then Err dbg
     else
       let (args'1,args'2) =
         CList.chop (List.length args'-List.length args) args' in
@@ -1348,16 +1378,28 @@ module Unif (P : Params) = struct
     check_product dbg env sigma0 ty (name, a) &&=
     unify_constr ~conv_t env' t1 t'
 end
-  
-let unify_evar_conv ?(ismatch=false) ts =
-  let module P = (struct let ts = ts let ismatch = ismatch end : Params) in
+
+module rec UnifR : Unif= Unif(Unif)
+
+let unify_evar_conv ts =
+  let module P = (struct
+    let ts = ts
+    let wreduce = Both
+    let winst = Both
+    let match_evars = Evar.Set.empty
+  end : Params) in
   let module M = Unif(P) in
   M.unify_evar_conv
 
-let unify_constr ?(ismatch=false) ts =
-  let module P = (struct let ts = ts let ismatch = ismatch end : Params) in
+let unify_match evars ts =
+  let module P = (struct
+    let ts = ts
+    let wreduce = Right
+    let winst = Left
+    let match_evars = evars
+  end : Params) in
   let module M = Unif(P) in
-  M.unify_constr
+  M.unify_evar_conv
 
 let use_munify () = !munify_on
 let set_use_munify b = 
