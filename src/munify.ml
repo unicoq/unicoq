@@ -721,25 +721,117 @@ exception InternalException
 (** {2 The function} *)
 type thedir = Left | Right | Both
 
+(** Enum type indicating if the algorithm must swap the lhs and rhs. *)
+type direction = Original | Swap
+
 module type Params = sig
   val ts : Names.transparent_state
   val wreduce : thedir
   val winst : thedir
   val match_evars : Evar.Set.t
 end
-(*
-module type UnifType = functor (P : Params) -> sig
-  val unify_evar_conv : Evarsolve.conv_fun
-end
-*)
+
 module type UnifT = functor (P : Params) -> sig
+  val unify_evar_conv : Evarsolve.conv_fun
+
   val unify_constr : ?conv_t:R.conv_pb ->
     Environ.env ->
     Term.constr -> Term.constr -> Logger.log * Evd.evar_map -> unif
 end
 
-module Unif = functor (M : UnifT) (P : Params) -> struct
-  open P
+module Inst = functor (U : UnifT) (P : Params) -> struct
+
+  let remove_equal_tail (h, args) (h', args') =
+    let rargs = List.rev args in
+    let rargs' = List.rev args' in
+    let noccur i xs ys =
+      not (Termops.occur_term i h')
+      && not (Termops.occur_term i h)
+      && not (List.exists (Termops.occur_term i) ys)
+      && not (List.exists (Termops.occur_term i) xs) in
+    let rec remove rargs rargs' =
+      match rargs, rargs' with
+      | (x :: xs), (y :: ys) when eq_constr x y && noccur x xs ys -> remove xs ys
+      | _, _ -> rargs, rargs'
+    in 
+    let (xs, ys) = remove rargs rargs' in
+    (List.rev xs, List.rev ys)
+
+  (* pre: args and args' are lists of vars and/or rels. subs is an array of rels and vars. *)
+  let instantiate' dir conv_t env (ev, subs as uv) args (h, args') (dbg, sigma0) =
+    let args, args' = remove_equal_tail (mkEvar uv, args) (h, args') in
+    (* beta-reduce to remove dependencies *)
+    let t = RO.whd_beta sigma0 (applist (h, args')) in
+    let evi = Evd.find_undefined sigma0 ev in
+    let nc = Evd.evar_filtered_context evi in
+    let res = 
+      let subsl = Array.to_list subs in
+      invert Evar.Map.empty sigma0 nc t subsl args ev >>= fun (map, t') ->
+      fill_lambdas_invert_types map env sigma0 nc t' subsl args ev >>= fun (map, t') ->
+      let sigma1 = prune_all map sigma0 in
+      let t' = Evarutil.nf_evar sigma1 t' in
+      let sigma1, t' = 
+	Evarsolve.refresh_universes
+	    (if conv_t == R.CUMUL && isArity t' then
+	      (* ?X <= Type(i) -> X := Type j, j <= i *)
+	      (* Type(i) <= X -> X := Type j, i <= j *)
+	      Some (dir == Original) 
+	   else None)
+	    (Environ.push_named_context nc env) sigma1 t' in
+      let t'' = instantiate_evar nc t' subsl in
+      let ty = Evd.existential_type sigma1 uv in
+      let unifty = 
+	try 
+	  match kind_of_term t'' with
+	  | Evar (evk2, _) ->
+            (* ?X : Π Δ. Type i = ?Y : Π Δ'. Type j.
+	       The body of ?X and ?Y just has to be of type Π Δ. Type k for some k <= i, j. *)
+	    let evienv = Evd.evar_env evi in
+	    let ctx1, i = R.dest_arity evienv evi.Evd.evar_concl in
+	    let evi2 = Evd.find sigma1 evk2 in
+	    let evi2env = Evd.evar_env evi2 in
+	    let ctx2, j = R.dest_arity evi2env evi2.Evd.evar_concl in
+	    let ui, uj = univ_of_sort i, univ_of_sort j in
+	    if i == j || Evd.check_eq sigma1 ui uj then (* Shortcut, i = j *) 
+	      Success (dbg, sigma1)
+	    else if Evd.check_leq sigma1 ui uj then
+              let t2 = it_mkProd_or_LetIn (mkSort i) ctx2 in
+	      Success (dbg, Evd.downcast evk2 t2 sigma1)
+            else if Evd.check_leq sigma1 uj ui then
+	      let t1 = it_mkProd_or_LetIn (mkSort j) ctx1 in
+              Success (dbg, Evd.downcast ev t1 sigma1)
+	    else
+              let sigma1, k = Evd.new_sort_variable Evd.univ_flexible_alg sigma1 in
+	      let t1 = it_mkProd_or_LetIn (mkSort k) ctx1 in
+	      let t2 = it_mkProd_or_LetIn (mkSort k) ctx2 in
+	      let sigma1 = Evd.set_leq_sort env (Evd.set_leq_sort env sigma1 k i) k j in
+	      Success (dbg, Evd.downcast evk2 t2 (Evd.downcast ev t1 sigma1))
+	  | _ -> raise R.NotArity
+	  with R.NotArity ->
+	    let ty' = Retyping.get_type_of env sigma1 t'' in
+            let module P = (struct
+              let ts = P.ts
+              let wreduce = Both
+              let winst = Both
+              let match_evars = Evar.Set.empty
+            end : Params) in
+           let module U' = U(P) in
+           U'.unify_constr ~conv_t:R.CUMUL env ty' ty (dbg, sigma1)
+	in
+	let p = unifty &&= fun (dbg, sigma2) ->
+	  let t' = RO.nf_evar sigma2 t' in
+	    if Termops.occur_meta t' || Termops.occur_evar ev t' then 
+	      Err dbg
+	    else
+	      (dstats.instantiations <- succ_big_int dstats.instantiations;
+	       Success (dbg, Evd.define ev t' sigma2))
+	in
+	  Some p
+    in
+    match res with
+    | Some r -> r
+    | None -> Err dbg
+end
 
   let swap_match = function
     | Left -> Right
@@ -749,19 +841,18 @@ module Unif = functor (M : UnifT) (P : Params) -> struct
   (** Enum type indicating where it is useless to reduce. *)
   type stucked = NotStucked | StuckedLeft | StuckedRight
 
-  (** Enum type indicating if the algorithm must swap the lhs and rhs. *)
-  type direction = Original | Swap
+module rec Unif : UnifT = functor (P : Params) -> struct
 
   let switch dir f t u = if dir == Original then f t u else f u t
 
   let must_inst dir e =
-    winst == Both
-    || (winst == Left && dir == Original && Evar.Set.mem e match_evars)
-    || (winst == Right && dir == Swap && Evar.Set.mem e match_evars)
+    P.winst == Both
+    || (P.winst == Left && dir == Original && Evar.Set.mem e P.match_evars)
+    || (P.winst == Right && dir == Swap && Evar.Set.mem e P.match_evars)
 
-  let reduce_left = wreduce == Left || wreduce == Both
+  let reduce_left = P.wreduce == Left || P.wreduce == Both
 
-  let reduce_right = wreduce == Right || wreduce == Both
+  let reduce_right = P.wreduce == Right || P.wreduce == Both
 
   (** {3 Hashing table of failures} *)
   let tbl = Hashtbl.create 1000
@@ -775,7 +866,7 @@ module Unif = functor (M : UnifT) (P : Params) -> struct
     if ground_spine sigma0 sp1 && ground_spine sigma0 sp2 then
       let app1 = applist sp1 and app2 = applist sp2 in
       try
-        let (sigma1, b) = RO.infer_conv ~pb:conv_t ~ts env sigma0 app1 app2 in
+        let (sigma1, b) = RO.infer_conv ~pb:conv_t ~ts:P.ts env sigma0 app1 app2 in
         if b then
           report (log_eq_spine env "Reduce-Same" conv_t sp1 sp2 (dbg, sigma1))
         else Err dbg
@@ -1078,7 +1169,7 @@ module Unif = functor (M : UnifT) (P : Params) -> struct
         unify' ~conv_t env t t2)
 
     | _, Case _ | _, Fix _ when reduce_right && stuck != StuckedRight ->
-      let t2 = evar_apprec ts env sigma0 t' in
+      let t2 = evar_apprec P.ts env sigma0 t' in
       if not (eq_app_stack t' t2) then
         begin report (
             log_eq_spine env "Case-IotaR" conv_t t t' (dbg, sigma0) &&=
@@ -1104,7 +1195,7 @@ module Unif = functor (M : UnifT) (P : Params) -> struct
         unify' ~conv_t env t1 t')
 
     | Case _, _ | Fix _, _ when reduce_left && stuck != StuckedLeft ->
-      let t2 = evar_apprec ts env sigma0 t in
+      let t2 = evar_apprec P.ts env sigma0 t in
       if not (eq_app_stack t t2) then
 	begin report (
           log_eq_spine env "Case-IotaL" conv_t t t' (dbg, sigma0) &&=
@@ -1117,31 +1208,31 @@ module Unif = functor (M : UnifT) (P : Params) -> struct
     (* Constants get unfolded after everything else *)
     | _, Const _
     | _, Rel _
-    | _, Var _ when reduce_right && has_definition ts env c' && stuck == NotStucked ->
+    | _, Var _ when reduce_right && has_definition P.ts env c' && stuck == NotStucked ->
       if is_stuck env sigma0 t' then
         try_step ~stuck:StuckedRight conv_t env t t' sigma0 dbg
       else report (
           log_eq_spine env "Cons-DeltaNotStuckR" conv_t t t' (dbg, sigma0) &&=
-          unify' ~conv_t env t (evar_apprec ts env sigma0 (get_def_app_stack env t')))
+          unify' ~conv_t env t (evar_apprec P.ts env sigma0 (get_def_app_stack env t')))
     | Const _, _ 
     | Rel _, _ 
-    | Var _, _  when reduce_left && has_definition ts env c && stuck == StuckedRight ->
+    | Var _, _  when reduce_left && has_definition P.ts env c && stuck == StuckedRight ->
       report (
         log_eq_spine env "Cons-DeltaStuckL" conv_t t t'  (dbg, sigma0) &&=
-        unify' ~conv_t env (evar_apprec ts env sigma0 (get_def_app_stack env t)) t')
+        unify' ~conv_t env (evar_apprec P.ts env sigma0 (get_def_app_stack env t)) t')
 
     | _, Const _ 
     | _, Rel _
-    | _, Var _ when reduce_right && has_definition ts env c' ->
+    | _, Var _ when reduce_right && has_definition P.ts env c' ->
       report (
         log_eq_spine env "Cons-DeltaR" conv_t t t' (dbg, sigma0) &&=
-        unify' ~conv_t env t (evar_apprec ts env sigma0 (get_def_app_stack env t')))
+        unify' ~conv_t env t (evar_apprec P.ts env sigma0 (get_def_app_stack env t')))
     | Const _, _
     | Rel _, _ 
-    | Var _, _  when reduce_left && has_definition ts env c ->
+    | Var _, _  when reduce_left && has_definition P.ts env c ->
       report (
         log_eq_spine env "Cons-DeltaL" conv_t t t' (dbg, sigma0) &&=
-        unify' ~conv_t env (evar_apprec ts env sigma0 (get_def_app_stack env t)) t')
+        unify' ~conv_t env (evar_apprec P.ts env sigma0 (get_def_app_stack env t)) t')
 
     (* Lam-EtaR *)
     | _, Lambda (name, t1, c1) when reduce_right && CList.is_empty l' && not (isLambda c) ->
@@ -1157,114 +1248,24 @@ module Unif = functor (M : UnifT) (P : Params) -> struct
     | _, _ -> Err dbg
 
   and is_stuck env sigma (hd, args) =
-    let (hd, args) = evar_apprec ts env sigma (try_unfolding ts env hd, args) in
+    let (hd, args) = evar_apprec P.ts env sigma (try_unfolding P.ts env hd, args) in
     let rec is_unnamed (hd, args) = match kind_of_term hd with
       | (Var _|Construct _|Ind _|Const _|Prod _|Sort _) -> false
       | (Case _|Fix _|CoFix _|Meta _|Rel _)-> true
       | Evar _ -> false (* immediate solution without Canon Struct *)
       | Lambda _ -> assert(args = []); true
-      | LetIn (_, b, _, c) -> is_unnamed (evar_apprec ts env sigma (subst1 b c, args))
+      | LetIn (_, b, _, c) -> is_unnamed (evar_apprec P.ts env sigma (subst1 b c, args))
       | Proj (p, c) -> false
       | App _| Cast _ -> assert false
     in is_unnamed (hd, args)
-
-  and remove_equal_tail (h, args) (h', args') =
-    let rargs = List.rev args in
-    let rargs' = List.rev args' in
-    let noccur i xs ys =
-      not (Termops.occur_term i h')
-      && not (Termops.occur_term i h)
-      && not (List.exists (Termops.occur_term i) ys)
-      && not (List.exists (Termops.occur_term i) xs) in
-    let rec remove rargs rargs' =
-      match rargs, rargs' with
-      | (x :: xs), (y :: ys) when eq_constr x y && noccur x xs ys -> remove xs ys
-      | _, _ -> rargs, rargs'
-    in 
-    let (xs, ys) = remove rargs rargs' in
-    (List.rev xs, List.rev ys)
-
-  (* pre: args and args' are lists of vars and/or rels. subs is an array of rels and vars. *)
-  and instantiate' dir conv_t env (ev, subs as uv) args (h, args') (dbg, sigma0) =
-    let args, args' = remove_equal_tail (mkEvar uv, args) (h, args') in
-    (* beta-reduce to remove dependencies *)
-    let t = RO.whd_beta sigma0 (applist (h, args')) in
-    let evi = Evd.find_undefined sigma0 ev in
-    let nc = Evd.evar_filtered_context evi in
-    let res = 
-      let subsl = Array.to_list subs in
-      invert Evar.Map.empty sigma0 nc t subsl args ev >>= fun (map, t') ->
-      fill_lambdas_invert_types map env sigma0 nc t' subsl args ev >>= fun (map, t') ->
-      let sigma1 = prune_all map sigma0 in
-      let t' = Evarutil.nf_evar sigma1 t' in
-      let sigma1, t' = 
-	Evarsolve.refresh_universes
-	    (if conv_t == R.CUMUL && isArity t' then
-	      (* ?X <= Type(i) -> X := Type j, j <= i *)
-	      (* Type(i) <= X -> X := Type j, i <= j *)
-	      Some (dir == Original) 
-	   else None)
-	    (Environ.push_named_context nc env) sigma1 t' in
-      let t'' = instantiate_evar nc t' subsl in
-      let ty = Evd.existential_type sigma1 uv in
-      let unifty = 
-	try 
-	  match kind_of_term t'' with
-	  | Evar (evk2, _) ->
-            (* ?X : Π Δ. Type i = ?Y : Π Δ'. Type j.
-	       The body of ?X and ?Y just has to be of type Π Δ. Type k for some k <= i, j. *)
-	    let evienv = Evd.evar_env evi in
-	    let ctx1, i = R.dest_arity evienv evi.Evd.evar_concl in
-	    let evi2 = Evd.find sigma1 evk2 in
-	    let evi2env = Evd.evar_env evi2 in
-	    let ctx2, j = R.dest_arity evi2env evi2.Evd.evar_concl in
-	    let ui, uj = univ_of_sort i, univ_of_sort j in
-	    if i == j || Evd.check_eq sigma1 ui uj then (* Shortcut, i = j *) 
-	      Success (dbg, sigma1)
-	    else if Evd.check_leq sigma1 ui uj then
-              let t2 = it_mkProd_or_LetIn (mkSort i) ctx2 in
-	      Success (dbg, Evd.downcast evk2 t2 sigma1)
-            else if Evd.check_leq sigma1 uj ui then
-	      let t1 = it_mkProd_or_LetIn (mkSort j) ctx1 in
-              Success (dbg, Evd.downcast ev t1 sigma1)
-	    else
-              let sigma1, k = Evd.new_sort_variable Evd.univ_flexible_alg sigma1 in
-	      let t1 = it_mkProd_or_LetIn (mkSort k) ctx1 in
-	      let t2 = it_mkProd_or_LetIn (mkSort k) ctx2 in
-	      let sigma1 = Evd.set_leq_sort env (Evd.set_leq_sort env sigma1 k i) k j in
-	      Success (dbg, Evd.downcast evk2 t2 (Evd.downcast ev t1 sigma1))
-	  | _ -> raise R.NotArity
-	  with R.NotArity ->
-	    let ty' = Retyping.get_type_of env sigma1 t'' in
-            let module P = (struct
-              let ts = ts
-              let wreduce = Both
-              let winst = Both
-              let match_evars = Evar.Set.empty
-            end : Params) in
-           let module M' = M(P) in
-           M'.unify_constr ~conv_t:R.CUMUL env ty' ty (dbg, sigma1)
-	in
-	let p = unifty &&= fun (dbg, sigma2) ->
-	  let t' = RO.nf_evar sigma2 t' in
-	    if Termops.occur_meta t' || Termops.occur_evar ev t' then 
-	      Err dbg
-	    else
-	      (dstats.instantiations <- succ_big_int dstats.instantiations;
-	       Success (dbg, Evd.define ev t' sigma2))
-	in
-	  Some p
-    in
-    match res with
-    | Some r -> r
-    | None -> Err dbg
 
   and meta_inst dir conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
     if must_inst dir ev && is_variable_subs subs && is_variable_args args then
       begin
         try 
           report (log_eq_spine env "Meta-Inst" conv_t (mkEvar evsubs, args) t (dbg, sigma) &&=
-                  instantiate' dir conv_t env evsubs args t)
+                  let module I' = Inst(Unif)(P) in
+                  I'.instantiate' dir conv_t env evsubs args t)
         with CannotPrune -> report (Err dbg)
       end
     else Err dbg
@@ -1296,16 +1297,16 @@ module Unif = functor (M : UnifT) (P : Params) -> struct
   and meta_reduce dir conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
     (* Meta-Reduce: before giving up we see if we can reduce on the right *)
     if must_inst dir ev then
-      if has_definition ts env h then
+      if has_definition P.ts env h then
         begin
-          let t' = evar_apprec ts env sigma (get_def_app_stack env t) in 
+          let t' = evar_apprec P.ts env sigma (get_def_app_stack env t) in 
           report (
             log_eq_spine env "Meta-Reduce" conv_t (mkEvar evsubs, args) t (dbg, sigma) &&=
             switch dir (unify' ~conv_t env) (mkEvar evsubs, args) t')
         end
       else
         begin
-          let t' = evar_apprec ts env sigma t in
+          let t' = evar_apprec P.ts env sigma t in
           if not (eq_app_stack t t') then
             begin 
               report (
@@ -1378,8 +1379,6 @@ module Unif = functor (M : UnifT) (P : Params) -> struct
     check_product dbg env sigma0 ty (name, a) &&=
     unify_constr ~conv_t env' t1 t'
 end
-
-module rec UnifR : Unif= Unif(Unif)
 
 let unify_evar_conv ts =
   let module P = (struct
