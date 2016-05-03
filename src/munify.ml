@@ -731,7 +731,7 @@ module type Params = sig
   val match_evars : Evar.Set.t
 end
 
-module type UnifT = functor (P : Params) -> sig
+module type Unifier = sig
   val unify_evar_conv : Evarsolve.conv_fun
 
   val unify_constr : ?conv_t:R.conv_pb ->
@@ -739,7 +739,9 @@ module type UnifT = functor (P : Params) -> sig
     Term.constr -> Term.constr -> Logger.log * Evd.evar_map -> unif
 end
 
-module Inst = functor (U : UnifT) (P : Params) -> struct
+module type UnifT = functor (P : Params) -> Unifier
+
+module Inst = functor (U : Unifier) -> struct
 
   let remove_equal_tail (h, args) (h', args') =
     let rargs = List.rev args in
@@ -809,14 +811,7 @@ module Inst = functor (U : UnifT) (P : Params) -> struct
 	  | _ -> raise R.NotArity
 	  with R.NotArity ->
 	    let ty' = Retyping.get_type_of env sigma1 t'' in
-            let module P = (struct
-              let ts = P.ts
-              let wreduce = Both
-              let winst = Both
-              let match_evars = Evar.Set.empty
-            end : Params) in
-           let module U' = U(P) in
-           U'.unify_constr ~conv_t:R.CUMUL env ty' ty (dbg, sigma1)
+            U.unify_constr ~conv_t:R.CUMUL env ty' ty (dbg, sigma1)
 	in
 	let p = unifty &&= fun (dbg, sigma2) ->
 	  let t' = RO.nf_evar sigma2 t' in
@@ -841,8 +836,8 @@ end
   (** Enum type indicating where it is useless to reduce. *)
   type stucked = NotStucked | StuckedLeft | StuckedRight
 
-module rec Unif : UnifT = functor (P : Params) -> struct
-
+let rec unif (module P : Params) : (module Unifier) = (
+module struct
   let switch dir f t u = if dir == Original then f t u else f u t
 
   let must_inst dir e =
@@ -1262,9 +1257,16 @@ module rec Unif : UnifT = functor (P : Params) -> struct
   and meta_inst dir conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
     if must_inst dir ev && is_variable_subs subs && is_variable_args args then
       begin
-        try 
+        try
+          let module P' = (struct
+            let ts = P.ts
+            let wreduce = Both
+            let winst = Both
+            let match_evars = Evar.Set.empty
+          end : Params) in
+          let module U' = (val unif (module P') : Unifier) in
           report (log_eq_spine env "Meta-Inst" conv_t (mkEvar evsubs, args) t (dbg, sigma) &&=
-                  let module I' = Inst(Unif)(P) in
+                  let module I' = Inst(U') in
                   I'.instantiate' dir conv_t env evsubs args t)
         with CannotPrune -> report (Err dbg)
       end
@@ -1378,7 +1380,7 @@ module rec Unif : UnifT = functor (P : Params) -> struct
     let ty = Retyping.get_type_of env sigma0 (applist t) in
     check_product dbg env sigma0 ty (name, a) &&=
     unify_constr ~conv_t env' t1 t'
-end
+end)
 
 let unify_evar_conv ts =
   let module P = (struct
@@ -1387,7 +1389,7 @@ let unify_evar_conv ts =
     let winst = Both
     let match_evars = Evar.Set.empty
   end : Params) in
-  let module M = Unif(P) in
+  let module M = (val unif (module P)) in
   M.unify_evar_conv
 
 let unify_match evars ts =
@@ -1397,7 +1399,7 @@ let unify_match evars ts =
     let winst = Left
     let match_evars = evars
   end : Params) in
-  let module M = Unif(P) in
+  let module M = (val unif (module P)) in
   M.unify_evar_conv
 
 let use_munify () = !munify_on
