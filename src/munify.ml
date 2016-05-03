@@ -1260,8 +1260,8 @@ module struct
         try
           let module P' = (struct
             let ts = P.ts
-            let wreduce = if P.wreduce <> Both then Left else Both
-            let winst = if P.winst <> Both then Right else Both
+            let wreduce = Both
+            let winst = Both
             let match_evars = P.match_evars
           end : Params) in
           let module U' = (val unif (module P') : Unifier) in
