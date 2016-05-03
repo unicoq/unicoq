@@ -1260,9 +1260,9 @@ module struct
         try
           let module P' = (struct
             let ts = P.ts
-            let wreduce = Both
-            let winst = Both
-            let match_evars = Evar.Set.empty
+            let wreduce = if P.wreduce <> Both then Left else Both
+            let winst = if P.winst <> Both then Right else Both
+            let match_evars = P.match_evars
           end : Params) in
           let module U' = (val unif (module P') : Unifier) in
           report (log_eq_spine env "Meta-Inst" conv_t (mkEvar evsubs, args) t (dbg, sigma) &&=
