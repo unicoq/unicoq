@@ -723,6 +723,10 @@ type thedir = Left | Right | Both
 
 (** Enum type indicating if the algorithm must swap the lhs and rhs. *)
 type direction = Original | Swap
+let switch dir f t u = if dir == Original then f t u else f u t
+
+(** Enum type indicating where it is useless to reduce. *)
+type stucked = NotStucked | StuckedLeft | StuckedRight
 
 module type Params = sig
   val ts : Names.transparent_state
@@ -828,17 +832,9 @@ module Inst = functor (U : Unifier) -> struct
     | None -> Err dbg
 end
 
-  let swap_match = function
-    | Left -> Right
-    | Right -> Left
-    | Both -> Both
-
-  (** Enum type indicating where it is useless to reduce. *)
-  type stucked = NotStucked | StuckedLeft | StuckedRight
 
 let rec unif (module P : Params) : (module Unifier) = (
 module struct
-  let switch dir f t u = if dir == Original then f t u else f u t
 
   let must_inst dir e =
     P.winst == Both
