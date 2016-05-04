@@ -732,7 +732,7 @@ module type Params = sig
   val ts : Names.transparent_state
   val wreduce : thedir
   val winst : thedir
-  val match_evars : Evar.Set.t
+  val match_evars : Evar.Set.t option
 end
 
 module type Unifier = sig
@@ -837,9 +837,10 @@ let rec unif (module P : Params) : (module Unifier) = (
 module struct
 
   let must_inst dir e =
-    P.winst == Both
-    || (P.winst == Left && dir == Original && Evar.Set.mem e P.match_evars)
-    || (P.winst == Right && dir == Swap && Evar.Set.mem e P.match_evars)
+    Option.cata (Evar.Set.mem e) true P.match_evars &&
+    (P.winst == Both
+    || (P.winst == Left && dir == Original)
+    || (P.winst == Right && dir == Swap))
 
   let reduce_left = P.wreduce == Left || P.wreduce == Both
 
@@ -1383,7 +1384,7 @@ let unify_evar_conv ts =
     let ts = ts
     let wreduce = Both
     let winst = Both
-    let match_evars = Evar.Set.empty
+    let match_evars = None
   end : Params) in
   let module M = (val unif (module P)) in
   M.unify_evar_conv
@@ -1393,7 +1394,7 @@ let unify_match evars ts =
     let ts = ts
     let wreduce = Right
     let winst = Left
-    let match_evars = evars
+    let match_evars = Some evars
   end : Params) in
   let module M = (val unif (module P)) in
   M.unify_evar_conv
