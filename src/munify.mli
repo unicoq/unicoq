@@ -9,6 +9,12 @@ type stats = {
 
 val unify_evar_conv : Names.transparent_state -> Evarsolve.conv_fun
 
+(** Given a set of evars s and terms t1 t2, it unifies the terms only
+    allowing instantiations from the evars in t1 and s, and only
+    allowing reduction on the t2. The idea is that t1 acts as a
+    "pattern" (for pattern matching), so only the variables in t1 are
+    instantiated, as long as they occur in s, and only the scrutinee
+    (t2) is reduced.  *)
 val unify_match : Evar.Set.t -> Names.transparent_state -> Evarsolve.conv_fun
 
 val get_stats : unit -> stats
