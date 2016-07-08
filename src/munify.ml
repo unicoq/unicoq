@@ -520,16 +520,9 @@ let invert map sigma ctx t subs args ev' =
   (try invert' false t 0 with NotUnique -> None) >>= fun c' ->
   return (!rmap, c')
 
-(** Collects (named) variables of a term. *)
-let collect_vars =
-  let rec aux vars c = match kind_of_term c with
-  | Var id -> Names.Idset.add id vars
-  | _ -> fold_constr aux vars c in
-  aux Names.Idset.empty
-
 (** True if at least one (named) var in tm is in vars. *)
 let free_vars_intersect tm vars = 
-  Names.Idset.exists (fun v -> List.mem v vars) (collect_vars tm)
+  Names.Idset.exists (fun v -> List.mem v vars) (Termops.collect_vars tm)
 
 let some_or_prop o =
   match o with
@@ -719,7 +712,9 @@ let specialize_evar env sigma (ev, subs) args =
 exception InternalException
 
 (** {2 The function} *)
-type thedir = Left | Right | Both
+
+(** Enum type to specify on which side of the equation an action is taken *)
+type which_side = Left | Right | Both
 
 (** Enum type indicating if the algorithm must swap the lhs and rhs. *)
 type direction = Original | Swap
@@ -728,13 +723,15 @@ let switch dir f t u = if dir == Original then f t u else f u t
 (** Enum type indicating where it is useless to reduce. *)
 type stucked = NotStucked | StuckedLeft | StuckedRight
 
+(** Input parameters for the algorithm *)
 module type Params = sig
   val ts : Names.transparent_state
-  val wreduce : thedir
-  val winst : thedir
-  val match_evars : Evar.Set.t option
+  val wreduce : which_side (* on which side it must perform reduction *)
+  val winst : which_side (* on which side evars are allowed to be instantiated *)
+  val match_evars : Evar.Set.t option (* which evars may be instantiated *)
 end
 
+(** The main module type of unification, containing the functions that can be exported *)
 module type Unifier = sig
   val unify_evar_conv : Evarsolve.conv_fun
 
@@ -745,8 +742,16 @@ end
 
 module type UnifT = functor (P : Params) -> Unifier
 
+(** Side module for instnatiation of evars. In certain cases we need
+    to call it with specific parameters, and this is why it is not
+    part of the main module. *)
 module Inst = functor (U : Unifier) -> struct
 
+  (** Removes the equal variables of args and args', starting from the
+      right most argument, until a different variable is found.
+      (Avoids unnecessary eta-expansions.) It needs to check that no
+      solution is lost, meaning that the variable being removed is not
+      duplicated in any of the spines or bodies. *)
   let remove_equal_tail (h, args) (h', args') =
     let rargs = List.rev args in
     let rargs' = List.rev args' in
@@ -832,18 +837,24 @@ module Inst = functor (U : Unifier) -> struct
     | None -> Err dbg
 end
 
-
+(** The main module *)
 let rec unif (module P : Params) : (module Unifier) = (
 module struct
 
+  (** If evar e can be instantiated:
+      1) It must be in match_evars (assuming match_evars is Some set).
+      2) The instantiation matches the direction in which it is being performed.
+  *)
   let must_inst dir e =
     Option.cata (Evar.Set.mem e) true P.match_evars &&
     (P.winst == Both
     || (P.winst == Left && dir == Original)
     || (P.winst == Right && dir == Swap))
 
+  (** If reduction is allowed to happen on the lhs. *)
   let reduce_left = P.wreduce == Left || P.wreduce == Both
 
+  (** If reduction is allowed to happen on the rhs. *)
   let reduce_right = P.wreduce == Right || P.wreduce == Both
 
   (** {3 Hashing table of failures} *)
@@ -851,6 +862,16 @@ module struct
 
   let tblfind t x = try Hashtbl.find t x with Not_found -> false
 
+  let try_hash env sp1 sp2 (dbg, sigma as dsigma) =
+    if use_hash () && tblfind tbl (sigma, env, sp1, sp2) then
+      begin
+        log_eq_spine env "Hash-Hit" R.CONV sp1 sp2 dsigma &&= fun (dbg, _) ->
+          report (Err dbg)
+      end
+    else
+      Success (dbg, sigma)
+
+  (** {3 Conversion check} *)
   let ground_spine sigma (h, args) =
     EU.is_ground_term sigma h && List.for_all (EU.is_ground_term sigma) args
 
@@ -864,15 +885,6 @@ module struct
         else Err dbg
       with Univ.UniverseInconsistency _ -> Err dbg
     else Err dbg
-
-  let try_hash env sp1 sp2 (dbg, sigma as dsigma) =
-    if use_hash () && tblfind tbl (sigma, env, sp1, sp2) then
-      begin
-        log_eq_spine env "Hash-Hit" R.CONV sp1 sp2 dsigma &&= fun (dbg, _) ->
-          report (Err dbg)
-      end
-    else
-      Success (dbg, sigma)
 
   (** Given a head term c and with arguments l it whd reduces c if it is
       an evar, returning the new head and list of arguments.
@@ -927,6 +939,10 @@ module struct
       if get_debug () then Logger.print_to_stdout log;
       Evarsolve.UnifFailure (sigma0, Pretype_errors.NotSameHead)
 
+  (** (Beta) This is related to Mtac, and is part of my thesis. The
+      idea is to allow for the execution of (arbitrary) code during
+      unification. At some point I need to either remove this, or
+      prove it is an useful thing to have... *)
   and try_run_and_unify env (c, l as t) (c', l' as t') sigma dbg =
     if (isConst c || isConst c') && not (eq_constr c c') then
       begin
