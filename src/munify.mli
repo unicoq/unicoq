@@ -1,5 +1,5 @@
-type unif = 
-    Success of Logger.log * Evd.evar_map 
+type unif =
+    Success of Logger.log * Evd.evar_map
   | Err of Logger.log
 
 type stats = {
@@ -17,4 +17,18 @@ val unify_evar_conv : Names.transparent_state -> Evarsolve.conv_fun
     (t2) is reduced.  *)
 val unify_match : Evar.Set.t -> Names.transparent_state -> Evarsolve.conv_fun
 
+(** Same as unify_match but with no reduction *)
+val unify_match_nored : Evar.Set.t -> Names.transparent_state -> Evarsolve.conv_fun
+
 val get_stats : unit -> stats
+
+
+(*** FOR TRACING PURPOSES ONLY ***)
+val invert :
+  int list Evar.Map.t ->
+  Evd.evar_map ->
+  (Names.Id.t * Term.constr option * Term.constr) list ->
+  Term.constr ->
+  Term.constr list ->
+  Term.constr list ->
+  Evar.t -> (int list Evar.Map.t * Term.constr) option
