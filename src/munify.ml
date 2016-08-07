@@ -1081,7 +1081,15 @@ module struct
       Err dbg
 
   and compare_heads conv_t env c c' (dbg, sigma0) =
-    let rigid_same () = report (log_eq env "Rigid-Same" conv_t c c' (dbg, sigma0)) in
+    let rigid_same sigma = report (log_eq env "Rigid-Same" conv_t c c' (dbg, sigma)) in
+    let rigid_same_univs sigma0 flex u1 u2 =
+      try let sigma1 = Evd.set_eq_instances ~flex sigma0 u1 u2 in
+          rigid_same sigma1
+      with Univ.UniverseInconsistency e ->
+	debug_str (Printf.sprintf "Rigid-Same exception: %s"
+          (Pp.string_of_ppcmds (Univ.explain_universe_inconsistency Univ.Level.pr e))) 0;
+        report (Err dbg)
+    in
     match (kind_of_term c, kind_of_term c') with
     (* Type-Same *)
     | Sort s1, Sort s2 ->
@@ -1125,16 +1133,15 @@ module struct
 
     (* Rigid-Same *)
     | Rel n1, Rel n2 when n1 = n2 ->
-    rigid_same ()
+      rigid_same sigma0
     | Var id1, Var id2 when Id.equal id1 id2 ->
-      rigid_same ()
-    | Const c1, Const c2 when Univ.eq_puniverses Names.eq_constant c1 c2 ->
-      rigid_same ()
-    | Ind c1, Ind c2 when Univ.eq_puniverses Names.eq_ind c1 c2 ->
-      rigid_same ()
-    | Construct c1, Construct c2
-      when Univ.eq_puniverses Names.eq_constructor c1 c2  ->
-      rigid_same ()
+      rigid_same sigma0
+    | Const (c1,u1), Const (c2,u2) when Names.eq_constant c1 c2 ->
+      rigid_same_univs sigma0 (Environ.evaluable_constant c1 env) u1 u2
+    | Ind (c1,u1), Ind (c2,u2) when Names.eq_ind c1 c2 ->
+      rigid_same_univs sigma0 false u1 u2
+    | Construct (c1,u1), Construct (c2,u2) when Names.eq_constructor c1 c2 ->
+      rigid_same_univs sigma0 false u1 u2
 
     | CoFix (i1,(_,tys1,bds1 as recdef1)), CoFix (i2,(_,tys2,bds2))
       when i1 = i2 ->
