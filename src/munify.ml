@@ -1127,7 +1127,6 @@ module struct
       let env' = Environ.push_rel (name, Some trm1, ty1) env in
       report (
         log_eq env "Let-Same" conv_t c c' (dbg, sigma0) &&=
-        unify_constr env ty1 ty2 &&=
         unify_constr env trm1 trm2 &&=
         unify_constr ~conv_t env' body1 body2)
 
