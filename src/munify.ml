@@ -824,7 +824,7 @@ module Inst = functor (U : Unifier) -> struct
 	in
 	let p = unifty &&= fun (dbg, sigma2) ->
 	  let t' = RO.nf_evar sigma2 t' in
-	    if Termops.occur_meta t' || Termops.occur_evar ev t' then
+	    if Termops.occur_meta t' (* || Termops.occur_evar ev t' *) then
 	      Err dbg
 	    else
 	      (dstats.instantiations <- succ_big_int dstats.instantiations;
