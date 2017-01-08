@@ -29,6 +29,10 @@ let sig_get_val s =
 let sig_upd_val s v =
   let Sigma.Sigma (_, s, p) = s in Sigma.Sigma (v, s, p)
 
+let sig_to_evar_map sigma =
+    let Sigma.Sigma (_, sigmat, _) = sigma in
+    Sigma.to_evar_map sigmat
+
 (** {2 Options for unification} *)
 
 (** {3 Enabling Unicoq (implementation at the end) *)
@@ -787,7 +791,8 @@ module Inst = functor (U : Unifier) -> struct
 
   (* pre: args and args' are lists of vars and/or rels. subs is an array of rels and vars. *)
   let instantiate' dir conv_t env (ev, subs as uv) args (h, args') sigma0 =
-    let Sigma.Sigma (_, evd, _) = sigma0 in
+    let open Sigma in
+    let Sigma (dbg, evd, _) = sigma0 in
     let evd = Sigma.to_evar_map evd in
     let args, args' = remove_equal_tail (mkEvar uv, args) (h, args') in
     (* beta-reduce to remove dependencies *)
@@ -798,8 +803,8 @@ module Inst = functor (U : Unifier) -> struct
       let subsl = Array.to_list subs in
       invert Evar.Map.empty evd nc t subsl args ev >>= fun (map, t') ->
       fill_lambdas_invert_types map env evd nc t' subsl args ev >>= fun (map, t') ->
-      let Sigma.Sigma (dbg, evd, _) = prune_all map sigma0 in
-      let evd = Sigma.to_evar_map evd in
+      let Sigma (dbg, evd, _) = prune_all map sigma0 in
+      let evd = to_evar_map evd in
       let t' = Evarutil.nf_evar evd t' in
       let evd, t' =
 	Evarsolve.refresh_universes
@@ -809,7 +814,7 @@ module Inst = functor (U : Unifier) -> struct
 	      Some (dir == Original)
 	   else None)
 	    (Environ.push_named_context nc env) evd t' in
-      let sigma1 = Sigma.Unsafe.of_pair (dbg, evd) in
+      let sigma1 = Unsafe.of_pair (dbg, evd) in
       let t'' = instantiate_evar nc t' subsl in
       let ty = Evd.existential_type evd uv in
       let unifty =
@@ -828,34 +833,34 @@ module Inst = functor (U : Unifier) -> struct
 	      Success sigma1
 	    else if Evd.check_leq evd ui uj then
               let t2 = it_mkProd_or_LetIn (mkSort i) ctx2 in
-	      Success (Sigma.Unsafe.of_pair (dbg, Evd.downcast evk2 t2 evd))
+	      Success (Unsafe.of_pair (dbg, Evd.downcast evk2 t2 evd))
             else if Evd.check_leq evd uj ui then
 	      let t1 = it_mkProd_or_LetIn (mkSort j) ctx1 in
-              Success (Sigma.Unsafe.of_pair (dbg, Evd.downcast ev t1 evd))
+              Success (Unsafe.of_pair (dbg, Evd.downcast ev t1 evd))
 	    else
-              let Sigma.Sigma (dbg, sigma1t, _) = sigma1 in
-              let Sigma.Sigma (k, sigma1t, _) = Sigma.new_sort_variable Evd.univ_flexible_alg sigma1t in
-              let evd = Sigma.to_evar_map sigma1t in
+              let Sigma (dbg, sigma1t, _) = sigma1 in
+              let Sigma (k, sigma1t, _) = new_sort_variable Evd.univ_flexible_alg sigma1t in
+              let evd = to_evar_map sigma1t in
 	      let t1 = it_mkProd_or_LetIn (mkSort k) ctx1 in
 	      let t2 = it_mkProd_or_LetIn (mkSort k) ctx2 in
 	      let sigma1 = Evd.set_leq_sort env (Evd.set_leq_sort env evd k i) k j in
-	      Success (Sigma.Unsafe.of_pair (dbg, Evd.downcast evk2 t2 (Evd.downcast ev t1 evd)))
+	      Success (Unsafe.of_pair (dbg, Evd.downcast evk2 t2 (Evd.downcast ev t1 evd)))
 	  | _ -> raise R.NotArity
 	  with R.NotArity ->
 	    let ty' = Retyping.get_type_of env evd t'' in
             U.unify_constr ~conv_t:R.CUMUL env ty' ty sigma1
 	in
 	let p = unifty &&= fun sigma2 ->
-          let Sigma.Sigma (dbg, sigma2t, _) = sigma2 in
-	  let t' = RO.nf_evar (Sigma.to_evar_map sigma2t) t' in
-	    if Termops.occur_meta t' (* || Termops.occur_evar ev t' *) then
-	      Err dbg
-	    else begin
-              dstats.instantiations <- succ_big_int dstats.instantiations;
-              let ev = Sigma.Unsafe.of_evar ev in
-              let sigma2t = Sigma.define ev t' sigma2t in
-              Success (sig_upd_val sigma2t dbg)
-            end
+          let Sigma (dbg, sigma2t, p) = sigma2 in
+	  let t' = RO.nf_evar (to_evar_map sigma2t) t' in
+	  if Termops.occur_meta t' (* || Termops.occur_evar ev t' *) then
+            Err dbg
+          else begin
+            dstats.instantiations <- succ_big_int dstats.instantiations;
+            let ev = Unsafe.of_evar ev in
+            let Sigma (_, sigma2t, q) = define ev t' sigma2t in
+            Success (Sigma (dbg, sigma2t, p+>q))
+          end
 	in
 	  Some p
     in
@@ -889,26 +894,27 @@ module struct
 
   let tblfind t x = try Hashtbl.find t x with Not_found -> false
 
-  let try_hash env sp1 sp2 (dbg, sigma as dsigma) =
+  let try_hash env sp1 sp2 sigma =
     if use_hash () && tblfind tbl (sigma, env, sp1, sp2) then
       begin
-        log_eq_spine env "Hash-Hit" R.CONV sp1 sp2 dsigma &&= fun (dbg, _) ->
-          report (Err dbg)
+        log_eq_spine env "Hash-Hit" R.CONV sp1 sp2 sigma &&= fun sigma ->
+          report (Err (sig_get_val sigma))
       end
     else
-      Success (dbg, sigma)
+      Success sigma
 
   (** {3 Conversion check} *)
   let ground_spine sigma (h, args) =
-    EU.is_ground_term sigma h && List.for_all (EU.is_ground_term sigma) args
+    let evd = sig_to_evar_map sigma in
+    EU.is_ground_term evd h && List.for_all (EU.is_ground_term evd) args
 
-  let try_conv conv_t env (c1, l1 as sp1) (c2, l2 as sp2) (dbg, sigma0) =
+  let try_conv conv_t env (c1, l1 as sp1) (c2, l2 as sp2) sigma0 =
     if ground_spine sigma0 sp1 && ground_spine sigma0 sp2 then
       let app1 = applist sp1 and app2 = applist sp2 in
       try
         let (sigma1, b) = RO.infer_conv ~pb:conv_t ~ts:P.ts env sigma0 app1 app2 in
         if b then
-          report (log_eq_spine env "Reduce-Same" conv_t sp1 sp2 (dbg, sigma1))
+          report (log_eq_spine env "Reduce-Same" conv_t sp1 sp2 sigma1)
         else Err dbg
       with Univ.UniverseInconsistency _ -> Err dbg
     else Err dbg
