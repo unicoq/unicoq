@@ -9,7 +9,7 @@
     This defines a tactic [munify x y] that unifies two typable terms.
 *)
 
-(* These are necessary for grammar extensions like the one at the end 
+(* These are necessary for grammar extensions like the one at the end
    of the module *)
 
 (*i camlp4deps: "parsing/grammar.cma" i*)
@@ -21,6 +21,8 @@ open Pp
 open Proofview
 open Notations
 open Munify
+open Constrarg
+open Proofview.Notations
 
 let understand env sigma {Glob_term.closure=closure;term=term} =
   let open Pretyping in
@@ -37,7 +39,7 @@ let munify_tac gl sigma ismatch x y =
   let evars evm = V82.tactic (Refiner.tclEVARS evm) in
   let (sigma, x) = understand env sigma x in
   let (sigma, y) = understand env sigma y in
-  let res = 
+  let res =
     let ts = Conv_oracle.get_transp_state (Environ.oracle env) in
     if ismatch then
       let evars = Evd.fold (fun e _->Evar.Set.add e) sigma Evar.Set.empty in
@@ -54,31 +56,31 @@ let munify_tac gl sigma ismatch x y =
 
 TACTIC EXTEND munify_tac
 | ["munify" uconstr(c) uconstr(c') ] ->
-  [ Proofview.Goal.enter begin fun gl ->
+  [ Proofview.Goal.enter {enter = begin fun gl ->
         let gl = Proofview.Goal.assume gl in
         let sigma = Goal.sigma gl in
-        munify_tac gl sigma false c c'
-      end
+        munify_tac gl (Sigma.to_evar_map sigma) false c c'
+      end}
   ]
 END
 
 
 TACTIC EXTEND mmatch_tac
 | ["mmatch" uconstr(c) uconstr(c') ] ->
-  [ Proofview.Goal.enter begin fun gl ->
+  [ Proofview.Goal.enter {enter = begin fun gl ->
         let gl = Proofview.Goal.assume gl in
         let env = Proofview.Goal.env gl in
         let sigma = Proofview.Goal.sigma gl in
-        munify_tac gl sigma true c c'
-      end
+        munify_tac gl (Sigma.to_evar_map sigma) true c c'
+      end}
   ]
 END
 
 VERNAC COMMAND EXTEND PrintMunifyStats CLASSIFIED AS SIDEFF
   | [ "Print" "Unicoq" "Stats" ] -> [
       let s = Munify.get_stats () in
-      Printf.printf "STATS:\t%s\t\t%s\n" 
-        (Big_int.string_of_big_int s.unif_problems) 
+      Printf.printf "STATS:\t%s\t\t%s\n"
+        (Big_int.string_of_big_int s.unif_problems)
         (Big_int.string_of_big_int s.instantiations)
   ]
 END

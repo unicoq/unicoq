@@ -12,13 +12,15 @@ open Universes
 open Globnames
 open Vars
 open Context
-open Errors
+open CErrors
 open Recordops
 open Big_int
 
 module RO = Reductionops
 module R = Reduction
 module EU = Evarutil
+module CND = Context.Named.Declaration
+module CRD = Context.Rel.Declaration
 
 (** {2 Options for unification} *)
 
@@ -163,12 +165,12 @@ let get_stats () = {
 (* Note: let-in contributes to the instance *)
 let make_evar_instance sign args =
   let rec instrec = function
-    | (id,_,_) :: sign, c::args when isVarId id c -> instrec (sign,args)
-    | (id,_,_) :: sign, c::args -> (id,c) :: instrec (sign,args)
+    | def :: sign, c::args when isVarId (CND.get_id def) c -> instrec (sign,args)
+    | def :: sign, c::args -> (CND.get_id def,c) :: instrec (sign,args)
     | [],[] -> []
     | [],_ | _,[] -> anomaly (str"Signature and its instance do not match")
   in
-    instrec (sign,args)
+  instrec (sign,args)
 
 let instantiate_evar sign c args =
   let inst = make_evar_instance sign args in
@@ -307,10 +309,9 @@ let debug_str s l =
     ()
 
 let debug_eq sigma env t c1 c2 l =
-  Pp.msg (Termops.print_constr_env env (EU.nf_evar sigma (applist c1)));
-  Printf.printf "%s" (if t == R.CONV then " =?= " else " <?= ");
-  Pp.msg (Termops.print_constr_env env (EU.nf_evar sigma (applist c2)));
-  Printf.printf "\n"
+  let s1 = string_of_ppcmds (Termops.print_constr_env env (EU.nf_evar sigma (applist c1))) in
+  let s2 = string_of_ppcmds (Termops.print_constr_env env (EU.nf_evar sigma (applist c2))) in
+  Printf.printf "%s %s %s\n" (if t == R.CONV then "=?=" else "<?=") s1 s2
 
 let print_eq f (conv_t, c1, c2) =
   output_string f "\\lstinline{";
@@ -340,7 +341,7 @@ let is_lift c =
 
 (** Given a named_context returns a list with its variables *)
 let id_substitution nc =
-  fold_named_context (fun (n,_,_) s -> mkVar n :: s) nc ~init:[]
+  List.fold_right (fun d s -> mkVar (CND.get_id d) :: s) nc []
 
 (** Pre: isVar v1 *)
 let is_same_var v1 v2 = isVar v2 && (destVar v1 = destVar v2)
@@ -380,22 +381,22 @@ let find_unique_rel = find_unique isRel destRel
 let has_definition ts env t =
   if isVar t then
     let var = destVar t in
-    if not (Closure.is_transparent_variable ts var) then
+    if not (CClosure.is_transparent_variable ts var) then
       false
     else
-      let (_, v,_) = Environ.lookup_named var env in
+      let v = CND.get_value (Environ.lookup_named var env) in
       match v with
 	| Some _ -> true
 	| _ -> false
   else if isRel t then
     let n = destRel t in
-    let (_,v,_) = Environ.lookup_rel n env in
+    let v = CRD.get_value (Environ.lookup_rel n env) in
     match v with
       | Some _ -> true
       | _ -> false
   else if isConst t then
     let c,_ = destConst t in
-      Closure.is_transparent_constant ts c &&
+      CClosure.is_transparent_constant ts c &&
       Environ.evaluable_constant c env
   else
     false
@@ -404,13 +405,13 @@ let has_definition ts env t =
 let get_definition env t =
   if isVar t then
     let var = destVar t in
-    let (_, v,_) = Environ.lookup_named var env in
+    let v = CND.get_value (Environ.lookup_named var env) in
     match v with
       | Some c -> c
       | _ -> anomaly (str"get_definition for var didn't have definition!")
   else if isRel t then
     let n = destRel t in
-    let (_,v,_) = Environ.lookup_rel n env in
+    let v = CRD.get_value (Environ.lookup_rel n env) in
     match v with
       | Some v -> (lift n) v
       | _ -> anomaly (str"get_definition for rel didn't have definition!")
@@ -474,14 +475,14 @@ let invert map sigma ctx t subs args ev' =
       | Var id ->
 	find_unique_var id sargs >>= fun j ->
 	if in_subs j then
-	  let (name, _, _) = List.nth ctx j in
+	  let name = CND.get_id (List.nth ctx j) in
 	  return (mkVar name)
 	else
 	  return (mkRel (List.length sargs - j + i))
       | Rel j when j > i->
 	find_unique_rel (j-i) sargs >>= fun k ->
 	if in_subs k then
-	  let (name, _, _) = List.nth ctx k in
+	  let name = CND.get_id (List.nth ctx k) in
 	  return (mkVar name)
 	else
 	  return (mkRel (List.length sargs - k + i))
@@ -535,14 +536,17 @@ let remove sigma l pos =
   let rec remove' i l vs =
     match l with
       | [] -> []
-      | ((x, o, t as p) :: s) ->
+      | (d :: s) ->
         (* Is there a way to avoid nf_evar? *)
+        let o = CND.get_value d in
+        let t = CND.get_type d in
+        let x = CND.get_id d in
         if List.mem i pos
 	  || free_vars_intersect (RO.nf_evar sigma t) vs
 	  || free_vars_intersect (RO.nf_evar sigma (some_or_prop o)) vs then
           remove' (i-1) s (x :: vs)
         else
-          (p :: remove' (i-1) s vs)
+          (d :: remove' (i-1) s vs)
   in List.rev (remove' (List.length l-1) l [])
 
 exception CannotPrune
@@ -571,9 +575,10 @@ let rec prune evd (ev, plist) =
     | Some (m, concl) ->
       let evd = prune_all m evd in
       let concl = RO.nf_evar evd (Evd.evar_concl evi) in
-      let evd', ev' = EU.new_evar_instance env_val' evd
-	concl id_env' in
-      Evd.define ev ev' evd'
+      let sigma = Sigma.Unsafe.of_evar_map evd in
+      let sigma = EU.new_evar_instance env_val' sigma concl id_env' in
+      let Sigma.Sigma (ev', evd', _) = sigma in
+      Evd.define ev ev' (Sigma.to_evar_map evd')
 
 and prune_all map evd =
   List.fold_left prune evd (Evar.Map.bindings map)
@@ -705,7 +710,7 @@ let specialize_evar env sigma (ev, subs) args =
   match args with
   | [] -> raise CannotPrune
   | hd :: tl ->
-    let sigma', lam = EU.define_evar_as_lambda env sigma (ev, subs) in
+    let sigma', lam = Evardefine.define_evar_as_lambda env sigma (ev, subs) in
     let (n, dom, codom) = destLambda (EU.nf_evar sigma' lam) in
       sigma', subst1 hd codom, tl
 
@@ -981,8 +986,10 @@ module struct
            | Some n when m = n -> (i,t2::ks, m-1)
            | _ ->
              let dloc = (Loc.dummy_loc, Evar_kinds.InternalHole) in
-             let (i',ev) = Evarutil.new_evar env i ~src:dloc (substl ks b) in
-             (i', ev :: ks, m - 1))
+             let sigma = Sigma.Unsafe.of_evar_map i in
+             let sigma = Evarutil.new_evar env sigma ~src:dloc (substl ks b) in
+             let Sigma.Sigma (ev, sigma, _) = sigma in
+             (Sigma.to_evar_map sigma, ev :: ks, m - 1))
         (evd,[],List.length bs) bs
     in
     report (
@@ -1109,7 +1116,7 @@ module struct
 
     (* Lam-Same *)
     | Lambda (name, t1, c1), Lambda (_, t2, c2) ->
-      let env' = Environ.push_rel (name, None, t1) env in
+      let env' = Environ.push_rel (CRD.of_tuple (name, None, t1)) env in
       report (
         log_eq env "Lam-Same" conv_t c c' (dbg, sigma0) &&=
         unify_constr env t1 t2 &&=
@@ -1120,11 +1127,11 @@ module struct
       report (
         log_eq env "Prod-Same" conv_t c c' (dbg, sigma0) &&=
         unify_constr env t1 t2 &&=
-        unify_constr ~conv_t (Environ.push_rel (name,None,t1) env) c1 c2)
+        unify_constr ~conv_t (Environ.push_rel (CRD.of_tuple (name,None,t1)) env) c1 c2)
 
     | LetIn (name, trm1, ty1, body1), LetIn (_, trm2, ty2, body2) ->
       (* Let-Same *)
-      let env' = Environ.push_rel (name, Some trm1, ty1) env in
+      let env' = Environ.push_rel (CRD.of_tuple (name, Some trm1, ty1)) env in
       report (
         log_eq env "Let-Same" conv_t c c' (dbg, sigma0) &&=
         unify_constr env trm1 trm2 &&=
@@ -1386,15 +1393,18 @@ module struct
   and check_product dbg env sigma ty (name, a) =
     let nc = Environ.named_context env in
     let naid = Namegen.next_name_away name (Termops.ids_of_named_context nc) in
-    let nc' = (naid, None, a) :: nc in
+    let nc' = CND.of_tuple (naid, None, a) :: nc in
     let sigma', univ = Evd.new_univ_variable Evd.univ_flexible sigma in
     let evi = Evd.make_evar (Environ.val_of_named_context nc') (mkType univ) in
-    let sigma'',v = Evarutil.new_pure_evar_full sigma' evi in
+    let sigma' = Sigma.Unsafe.of_evar_map sigma' in
+    let sigma' = Evarutil.new_pure_evar_full sigma' evi in
+    let Sigma.Sigma (v, sigma', _) = sigma' in
+    let sigma'' = Sigma.to_evar_map sigma' in
     let idsubst = Array.of_list (mkRel 1 :: id_substitution nc) in
     unify_constr ~conv_t:R.CUMUL env ty (mkProd (Names.Name naid, a, mkEvar(v, idsubst))) (dbg, sigma'')
 
   and eta_match conv_t env (name, a, t1) (th, tl as t) (dbg, sigma0 ) =
-    let env' = Environ.push_rel (name, None, a) env in
+    let env' = Environ.push_rel (CRD.of_tuple (name, None, a)) env in
     let t' = applist (lift 1 th, List.map (lift 1) tl @ [mkRel 1]) in
     let ty = Retyping.get_type_of env sigma0 (applist t) in
     check_product dbg env sigma0 ty (name, a) &&=

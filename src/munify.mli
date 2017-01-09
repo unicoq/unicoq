@@ -21,14 +21,3 @@ val unify_match : Evar.Set.t -> Names.transparent_state -> Evarsolve.conv_fun
 val unify_match_nored : Evar.Set.t -> Names.transparent_state -> Evarsolve.conv_fun
 
 val get_stats : unit -> stats
-
-
-(*** FOR TRACING PURPOSES ONLY ***)
-val invert :
-  int list Evar.Map.t ->
-  Evd.evar_map ->
-  (Names.Id.t * Term.constr option * Term.constr) list ->
-  Term.constr ->
-  Term.constr list ->
-  Term.constr list ->
-  Evar.t -> (int list Evar.Map.t * Term.constr) option
