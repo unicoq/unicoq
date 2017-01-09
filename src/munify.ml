@@ -895,7 +895,7 @@ module struct
   let tblfind t x = try Hashtbl.find t x with Not_found -> false
 
   let try_hash env sp1 sp2 sigma =
-    if use_hash () && tblfind tbl (sigma, env, sp1, sp2) then
+    if use_hash () && tblfind tbl (sig_to_evar_map sigma, env, sp1, sp2) then
       begin
         log_eq_spine env "Hash-Hit" R.CONV sp1 sp2 sigma &&= fun sigma ->
           report (Err (sig_get_val sigma))
@@ -909,11 +909,14 @@ module struct
     EU.is_ground_term evd h && List.for_all (EU.is_ground_term evd) args
 
   let try_conv conv_t env (c1, l1 as sp1) (c2, l2 as sp2) sigma0 =
+    let dbg = sig_get_val sigma0 in
     if ground_spine sigma0 sp1 && ground_spine sigma0 sp2 then
       let app1 = applist sp1 and app2 = applist sp2 in
       try
-        let (sigma1, b) = RO.infer_conv ~pb:conv_t ~ts:P.ts env sigma0 app1 app2 in
+        let evd = sig_to_evar_map sigma0 in
+        let (evd, b) = RO.infer_conv ~pb:conv_t ~ts:P.ts env evd app1 app2 in
         if b then
+          let sigma1 = Sigma.here dbg (Sigma.Unsafe.of_evar_map evd) in
           report (log_eq_spine env "Reduce-Same" conv_t sp1 sp2 sigma1)
         else Err dbg
       with Univ.UniverseInconsistency _ -> Err dbg
@@ -927,26 +930,28 @@ module struct
     (c', l' @ l)
 
   (** {3 "The Function" is split into several} *)
-  let rec unify' ?(conv_t=R.CONV) env t t' (dbg, sigma) =
+  let rec unify' ?(conv_t=R.CONV) env t t' sigma =
+    let evd = sig_to_evar_map sigma in
     assert (not (isApp (fst t) || isApp (fst t')));
-    let (c, l as t) = decompose_evar sigma t in
-    let (c', l' as t') = decompose_evar sigma t' in
-    if !dump then debug_eq sigma env conv_t t t' 0;
-    try_conv conv_t env t t' (dbg, sigma) ||= fun dbg ->
-      try_hash env t t' (dbg, sigma) &&= fun (dbg, sigma) ->
+    let (c, l as t) = decompose_evar evd t in
+    let (c', l' as t') = decompose_evar evd t' in
+    if !dump then debug_eq evd env conv_t t t' 0;
+    try_conv conv_t env t t' sigma ||= fun dbg ->
+      let sigma = sig_upd_val sigma dbg in
+      try_hash env t t' sigma &&= fun sigma ->
         let res =
           if isEvar c || isEvar c' then
-            one_is_meta dbg conv_t env sigma t t'
+            one_is_meta conv_t env sigma t t'
           else
             begin
-              try_run_and_unify env t t' sigma dbg
+              try_run_and_unify env t t' sigma
               ||= try_canonical_structures env t t' sigma
               ||= try_app_fo conv_t env t t' sigma
               ||= try_step conv_t env t t' sigma
             end
         in
         if not (is_success res) && use_hash () then
-          Hashtbl.add tbl (sigma, env, t, t') true;
+          Hashtbl.add tbl (evd, env, t, t') true;
         res
 
   and unify_constr ?(conv_t=R.CONV) env t t' =
@@ -976,27 +981,28 @@ module struct
       idea is to allow for the execution of (arbitrary) code during
       unification. At some point I need to either remove this, or
       prove it is an useful thing to have... *)
-  and try_run_and_unify env (c, l as t) (c', l' as t') sigma dbg =
+  and try_run_and_unify env (c, l as t) (c', l' as t') sigma =
+    let dbg = sig_get_val sigma in
     if (isConst c || isConst c') && not (eq_constr c c') then
       begin
         if is_lift c && List.length l = 3 then
-	  run_and_unify dbg env sigma l t'
+	  run_and_unify env sigma l t'
         else if is_lift c' && List.length l' = 3 then
-	  run_and_unify dbg env sigma l' t
+	  run_and_unify env sigma l' t
         else
 	  Err dbg
       end
     else
       Err dbg
 
-  and run_and_unify dbg env sigma0 args ty =
+  and run_and_unify env sigma0 args ty =
     let a, f, v = List.nth args 0, List.nth args 1, List.nth args 2 in
-    unify' ~conv_t:R.CUMUL env (decompose_app a) ty (dbg, sigma0) &&= fun (dbg, sigma1) ->
+    unify' ~conv_t:R.CUMUL env (decompose_app a) ty sigma0 &&= fun sigma1 ->
       match !run_function env sigma1 f with
       | Some (sigma2, v') -> unify' env (decompose_app v) (decompose_app v') (dbg, sigma2)
       | _ -> Err dbg
 
-  and try_canonical_structures env (c, _ as t) (c', _ as t') sigma dbg =
+  and try_canonical_structures env (c, _ as t) (c', _ as t') sigma =
     if (isConst c || isConst c') && not (eq_constr c c') then
       try conv_record dbg env sigma t t'
       with ProjectionNotFound ->
@@ -1025,7 +1031,7 @@ module struct
       unify' env (decompose_app c1) (c,(List.rev ks)) &&=
       ise_list2 (unify_constr env) ts ts1)
 
-  and try_app_fo conv_t env (c, l as t) (c', l' as t') sigma dbg =
+  and try_app_fo conv_t env (c, l as t) (c', l' as t') sigma =
     if List.length l = List.length l' then
       begin
         report (
@@ -1037,7 +1043,7 @@ module struct
     else
       Err dbg
 
-  and one_is_meta dbg conv_t env sigma0 (c, l as t) (c', l' as t') =
+  and one_is_meta conv_t env sigma0 (c, l as t) (c', l' as t') =
     (* first we instantiate all defined metas *)
     let nf_map = List.map (fun a->RO.nf_evar sigma0 a) in
     let (c, l) = (RO.nf_evar sigma0 c, nf_map l) in
