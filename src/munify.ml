@@ -876,7 +876,7 @@ module struct
     EU.is_ground_term sigma h && List.for_all (EU.is_ground_term sigma) args
 
   let try_conv conv_t env (c1, l1 as sp1) (c2, l2 as sp2) (dbg, sigma0) =
-    if ground_spine sigma0 sp1 && ground_spine sigma0 sp2 then
+    if P.wreduce == Both && ground_spine sigma0 sp1 && ground_spine sigma0 sp2 then
       let app1 = applist sp1 and app2 = applist sp2 in
       try
         let (sigma1, b) = RO.infer_conv ~pb:conv_t ~ts:P.ts env sigma0 app1 app2 in

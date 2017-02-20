@@ -37,10 +37,11 @@ Goal forall x y : nat, True.
 Set Unicoq Dump Equalities.
   evar (X : nat).
   munify 0 X.
-  mmatch X 0.
+  Fail mmatch X 0.  (* OK: it is not reducing on the left *)
+  mmatch 0 X.  (* OK: it is reducing on the right *)
   mmatch (S _) (1 + 0).
   mmatch (S _) (0 + (fun x=>x) 1).
-  Fail mmatch (0 + (fun x=>x) _) 1.
+  Fail mmatch (0 + (fun x=>x) 1) 1.
   mmatch _ 0.
   mmatch (_ X) 0.
   mmatch (_ X X) X. (* works because meta-reduce changes the rhs to 0 *)
