@@ -17,11 +17,12 @@
 
 DECLARE PLUGIN "unicoq"
 
+open Ltac_plugin
 open Pp
 open Proofview
 open Notations
 open Munify
-open Constrarg
+open Stdarg
 open Proofview.Notations
 
 let understand env sigma {Glob_term.closure=closure;term=term} =
