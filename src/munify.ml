@@ -38,7 +38,7 @@ let set_debug b =
     begin
       (* Evar instances might depend on Anonymous rels *)
       Detyping.set_detype_anonymous
-        (fun ?loc n -> CAst.make ?loc @@ Glob_term.GVar (Id.of_string ("_ANONYMOUS_REL_" ^ string_of_int n)))
+        (fun ?loc n -> Id.of_string ("_ANONYMOUS_REL_" ^ string_of_int n))
     end
 
 let get_debug () = !debug
@@ -1132,7 +1132,7 @@ module struct
       rigid_same sigma0
     | Var id1, Var id2 when Id.equal id1 id2 ->
       rigid_same sigma0
-    | Const (c1,u1), Const (c2,u2) when Names.eq_constant c1 c2 ->
+    | Const (c1,u1), Const (c2,u2) when Names.Constant.equal c1 c2 ->
       rigid_same_univs sigma0 (Environ.evaluable_constant c1 env) u1 u2
     | Ind (c1,u1), Ind (c2,u2) when Names.eq_ind c1 c2 ->
       rigid_same_univs sigma0 false u1 u2
@@ -1385,7 +1385,7 @@ module struct
   (* unifies ty with a product type from {name : a} to some Type *)
   and check_product dbg env sigma ty (name, a) =
     let nc = EConstr.named_context env in
-    let naid = Namegen.next_name_away name (Termops.ids_of_named_context nc) in
+    let naid = Namegen.next_name_away name (Id.Set.of_list @@ Termops.ids_of_named_context nc) in
     let nc' = CND.of_tuple (naid, None, a) :: nc in
     let sigma', univ = Evd.new_univ_variable Evd.univ_flexible sigma in
     let evi = Evd.make_evar (EConstr.val_of_named_context nc') (Constr.mkType univ) in

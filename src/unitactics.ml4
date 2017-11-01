@@ -22,15 +22,15 @@ open Pp
 open Proofview
 open Munify
 open Stdarg
+open Ltac_pretype
 
-let understand env sigma {Glob_term.closure=closure;term=term} =
+let understand env sigma {closure=closure;term=term} =
   let open Pretyping in
-  let open Glob_term in
   let flags = all_no_fail_flags in
   let lvar = { Glob_ops.empty_lvar with
-               ltac_constrs = closure.Glob_term.typed;
-               ltac_uconstrs = closure.Glob_term.untyped;
-               ltac_idents = closure.Glob_term.idents;
+               ltac_constrs = closure.typed;
+               ltac_uconstrs = closure.untyped;
+               ltac_idents = closure.idents;
              } in
   understand_ltac flags env sigma lvar WithoutTypeConstraint term
 
