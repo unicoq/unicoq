@@ -888,7 +888,11 @@ module struct
   *)
   let decompose_evar sigma (c, l) =
     let (c', l') = decompose_app sigma c in
-    (c', l' @ l)
+    if isCast sigma c' then
+      let (t, _, _) = destCast sigma c' in
+      (t, l' @ l)
+    else
+      (c', l' @ l)
 
   (** {3 "The Function" is split into several} *)
   let rec unify' ?(conv_t=R.CONV) env t t' (dbg, sigma) =
