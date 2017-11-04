@@ -17,17 +17,17 @@
 
 DECLARE PLUGIN "unicoq"
 
+open Ltac_plugin
 open Pp
 open Proofview
-open Notations
 open Munify
-open Constrarg
-open Proofview.Notations
+open Stdarg
 
 let understand env sigma {Glob_term.closure=closure;term=term} =
   let open Pretyping in
+  let open Glob_term in
   let flags = all_no_fail_flags in
-  let lvar = { empty_lvar with
+  let lvar = { Glob_ops.empty_lvar with
                ltac_constrs = closure.Glob_term.typed;
                ltac_uconstrs = closure.Glob_term.untyped;
                ltac_idents = closure.Glob_term.idents;
@@ -56,23 +56,23 @@ let munify_tac gl sigma ismatch x y =
 
 TACTIC EXTEND munify_tac
 | ["munify" uconstr(c) uconstr(c') ] ->
-  [ Proofview.Goal.enter {enter = begin fun gl ->
+  [ Proofview.Goal.enter begin fun gl ->
         let gl = Proofview.Goal.assume gl in
         let sigma = Goal.sigma gl in
-        munify_tac gl (Sigma.to_evar_map sigma) false c c'
-      end}
+        munify_tac gl sigma false c c'
+      end
   ]
 END
 
 
 TACTIC EXTEND mmatch_tac
 | ["mmatch" uconstr(c) uconstr(c') ] ->
-  [ Proofview.Goal.enter {enter = begin fun gl ->
+  [ Proofview.Goal.enter begin fun gl ->
         let gl = Proofview.Goal.assume gl in
-        let env = Proofview.Goal.env gl in
+        let _env = Proofview.Goal.env gl in
         let sigma = Proofview.Goal.sigma gl in
-        munify_tac gl (Sigma.to_evar_map sigma) true c c'
-      end}
+        munify_tac gl sigma true c c'
+      end
   ]
 END
 
