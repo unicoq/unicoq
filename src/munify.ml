@@ -5,20 +5,24 @@
 (***********************************************************)
 
 open Pp
-open Term
+open EConstr
 open Names
-open Coqlib
-open Universes
-open Globnames
 open Vars
-open Context
-open Errors
+open CErrors
 open Recordops
 open Big_int
+
+[@@@ocaml.warning "-9-27-40-41-42-48"]
 
 module RO = Reductionops
 module R = Reduction
 module EU = Evarutil
+module CND = Context.Named.Declaration
+module CRD = Context.Rel.Declaration
+
+let crd_of_tuple (x,y,z) = match y with
+  | Some y -> CRD.LocalDef(x,y,z)
+  | None   -> CRD.LocalAssum(x,z)
 
 (** {2 Options for unification} *)
 
@@ -34,13 +38,12 @@ let set_debug b =
     begin
       (* Evar instances might depend on Anonymous rels *)
       Detyping.set_detype_anonymous
-        (fun loc n -> Glob_term.GVar (loc, Id.of_string ("_ANONYMOUS_REL_" ^ string_of_int n)))
+        (fun ?loc n -> Id.of_string ("_ANONYMOUS_REL_" ^ string_of_int n))
     end
 
 let get_debug () = !debug
 
 let _ = Goptions.declare_bool_option {
-  Goptions.optsync  = true;
   Goptions.optdepr  = false;
   Goptions.optname  = "Debugging for unification";
   Goptions.optkey   = ["Unicoq";"Debug"];
@@ -50,7 +53,6 @@ let _ = Goptions.declare_bool_option {
 
 let trace = ref false
 let _ = Goptions.declare_bool_option {
-  Goptions.optsync  = true;
   Goptions.optdepr  = false;
   Goptions.optname  = "Prints the trace for unification";
   Goptions.optkey   = ["Unicoq";"Trace"];
@@ -60,7 +62,6 @@ let _ = Goptions.declare_bool_option {
 
 let dump = ref false
 let _ = Goptions.declare_bool_option {
-  Goptions.optsync  = true;
   Goptions.optdepr  = false;
   Goptions.optname  = "Prints every equality received";
   Goptions.optkey   = ["Unicoq";"Dump";"Equalities"];
@@ -70,7 +71,6 @@ let _ = Goptions.declare_bool_option {
 
 let latex_file = ref ""
 let _ = Goptions.declare_string_option {
-  Goptions.optsync = true;
   Goptions.optdepr = false;
   Goptions.optname = "Outputs the successful unification tree in this latex file, if distinct from nil";
   Goptions.optkey = ["Unicoq";"LaTex";"File"];
@@ -90,7 +90,6 @@ let set_super_aggressive b =
   else super_aggressive := b
 
 let _ = Goptions.declare_bool_option {
-  Goptions.optsync = true;
   Goptions.optdepr = false;
   Goptions.optname = "Enable more aggressive prunning";
   Goptions.optkey = ["Unicoq"; "Aggressive"];
@@ -99,7 +98,6 @@ let _ = Goptions.declare_bool_option {
 }
 
 let _ = Goptions.declare_bool_option {
-  Goptions.optsync = true;
   Goptions.optdepr = false;
   Goptions.optname =
     "Enable super aggressive prunning, moving arguments applied to a meta-variable" ^
@@ -114,7 +112,6 @@ let set_solving_eqn b = try_solving_eqn := b
 let get_solving_eqn () = !try_solving_eqn
 
 let _ = Goptions.declare_bool_option {
-  Goptions.optsync  = true;
   Goptions.optdepr  = false;
   Goptions.optname  = "Try using original algorithm to solve equations ?x = t";
   Goptions.optkey   = ["Unicoq"; "Try"; "Solving";"Eqn"];
@@ -128,7 +125,6 @@ let set_hash b = hash := b
 let use_hash () = !hash
 
 let _ = Goptions.declare_bool_option {
-  Goptions.optsync = true;
   Goptions.optdepr = false;
   Goptions.optname = "Use a hash table of failures";
   Goptions.optkey = ["Unicoq"; "Use";"Hash"];
@@ -161,23 +157,23 @@ let get_stats () = {
 
 (** {2 Functions borrowed from Coq 8.4 and not found in 8.5} *)
 (* Note: let-in contributes to the instance *)
-let make_evar_instance sign args =
+let make_evar_instance sigma sign args =
   let rec instrec = function
-    | (id,_,_) :: sign, c::args when isVarId id c -> instrec (sign,args)
-    | (id,_,_) :: sign, c::args -> (id,c) :: instrec (sign,args)
+    | def :: sign, c::args when isVarId sigma (CND.get_id def) c -> instrec (sign,args)
+    | def :: sign, c::args -> (CND.get_id def,c) :: instrec (sign,args)
     | [],[] -> []
     | [],_ | _,[] -> anomaly (str"Signature and its instance do not match")
   in
-    instrec (sign,args)
+  instrec (sign,args)
 
-let instantiate_evar sign c args =
-  let inst = make_evar_instance sign args in
+let instantiate_evar sigma sign c args =
+  let inst = make_evar_instance sigma sign args in
   if inst = [] then c else replace_vars inst c
 (** Not in 8.5 *)
 
 
 (** {2 Generic utility functions} *)
-let array_mem_from_i e i a =
+let _array_mem_from_i e i a =
   let j = ref i in
   let length = Array.length a in
   let b = ref false in
@@ -284,8 +280,8 @@ let log_eq env rule conv_t t1 t2 (l, sigma) =
   if not (get_debug () || !trace) then
     Success (l, sigma)
   else
-    let ppcmd_of env t =
-      try Termops.print_constr_env env t
+    let ppcmd_of env (t : EConstr.t) =
+      try Termops.print_constr_env env sigma t
       with _ -> Termops.print_constr t in
     let str1 = Pp.string_of_ppcmds (ppcmd_of env t1) in
     let str2 = Pp.string_of_ppcmds (ppcmd_of env t2) in
@@ -300,17 +296,16 @@ let log_eq_spine env rule conv_t t1 t2 (l, sigma as dsigma) =
   else
     log_eq env rule conv_t (applist t1) (applist t2) dsigma
 
-let debug_str s l =
+let debug_str s _l =
   if !debug then
     Printf.printf "%s\n" s
   else
     ()
 
-let debug_eq sigma env t c1 c2 l =
-  Pp.msg (Termops.print_constr_env env (EU.nf_evar sigma (applist c1)));
-  Printf.printf "%s" (if t == R.CONV then " =?= " else " <?= ");
-  Pp.msg (Termops.print_constr_env env (EU.nf_evar sigma (applist c2)));
-  Printf.printf "\n"
+let debug_eq env sigma t c1 c2 _l =
+  let s1 = string_of_ppcmds (Termops.print_constr_env env sigma (applist c1)) in
+  let s2 = string_of_ppcmds (Termops.print_constr_env env sigma (applist c2)) in
+  Printf.printf "%s %s %s\n" (if t == R.CONV then "=?=" else "<?=") s1 s2
 
 let print_eq f (conv_t, c1, c2) =
   output_string f "\\lstinline{";
@@ -326,13 +321,13 @@ let print_eq f (conv_t, c1, c2) =
 (** This is used in Beta's thesis, although it isn't fully studied.
     We leave it for now, but it might get GC at some point. *)
 let run_function = ref (fun _ _ _ -> None)
-let set_run f = run_function := f
+let _set_run f = run_function := f
 
 let lift_constr = ref (lazy mkProp)
-let set_lift_constr c = lift_constr := c
+let _set_lift_constr c = lift_constr := c
 
-let is_lift c =
-  try eq_constr c (Lazy.force !lift_constr)
+let is_lift sigma c =
+  try eq_constr sigma c (Lazy.force !lift_constr)
   with Not_found -> false
 
 
@@ -340,24 +335,24 @@ let is_lift c =
 
 (** Given a named_context returns a list with its variables *)
 let id_substitution nc =
-  fold_named_context (fun (n,_,_) s -> mkVar n :: s) nc ~init:[]
+  List.fold_right (fun d s -> mkVar (CND.get_id d) :: s) nc []
 
 (** Pre: isVar v1 *)
-let is_same_var v1 v2 = isVar v2 && (destVar v1 = destVar v2)
+let _is_same_var sigma v1 v2 = isVar sigma v2 && (destVar sigma v1 = destVar sigma v2)
 
 (** Pre: isRel v1 *)
-let is_same_rel v1 v2 = isRel v2 && destRel v1 = destRel v2
+let _is_same_rel sigma v1 v2 = isRel sigma v2 && destRel sigma v1 = destRel sigma v2
 
-let is_same_evar i1 ev2 =
-  match kind_of_term ev2 with
+let _is_same_evar sigma i1 ev2 =
+  match kind sigma ev2 with
   | Evar (i2, _) -> i1 = i2
   | _ -> false
 
-let isVarOrRel c = isVar c || isRel c
+let isVarOrRel sigma c = isVar sigma c || isRel sigma c
 
-let is_variable_subs = CArray.for_all (fun c -> isVar c || isRel c)
+let is_variable_subs sigma = CArray.for_all (fun c -> isVar sigma c || isRel sigma c)
 
-let is_variable_args = List.for_all (fun c -> isVar c || isRel c)
+let is_variable_args sigma = List.for_all (fun c -> isVar sigma c || isRel sigma c)
 
 (** find_unique finds a unique j such that List.nth j s = id. See use
     below to understand test and dest. *)
@@ -373,63 +368,63 @@ let find_unique test dest id s =
   else if i > 1 then raise NotUnique
   else  None
 
-let find_unique_var = find_unique isVar destVar
+let find_unique_var sigma = find_unique (isVar sigma) (destVar sigma)
 
-let find_unique_rel = find_unique isRel destRel
+let find_unique_rel sigma = find_unique (isRel sigma) (destRel sigma)
 
-let has_definition ts env t =
-  if isVar t then
-    let var = destVar t in
-    if not (Closure.is_transparent_variable ts var) then
+let has_definition sigma ts env t =
+  if isVar sigma t then
+    let var = destVar sigma t in
+    if not (CClosure.is_transparent_variable ts var) then
       false
     else
-      let (_, v,_) = Environ.lookup_named var env in
+      let v = CND.get_value (Environ.lookup_named var env) in
       match v with
 	| Some _ -> true
 	| _ -> false
-  else if isRel t then
-    let n = destRel t in
-    let (_,v,_) = Environ.lookup_rel n env in
+  else if isRel sigma t then
+    let n = destRel sigma t in
+    let v = CRD.get_value (Environ.lookup_rel n env) in
     match v with
       | Some _ -> true
       | _ -> false
-  else if isConst t then
-    let c,_ = destConst t in
-      Closure.is_transparent_constant ts c &&
+  else if isConst sigma t then
+    let c,_ = destConst sigma t in
+      CClosure.is_transparent_constant ts c &&
       Environ.evaluable_constant c env
   else
     false
 
 (** Must have a definition. *)
-let get_definition env t =
-  if isVar t then
-    let var = destVar t in
-    let (_, v,_) = Environ.lookup_named var env in
+let get_definition sigma env t : EConstr.t =
+  if isVar sigma t then
+    let var = destVar sigma t in
+    let v = CND.get_value (EConstr.lookup_named var env) in
     match v with
       | Some c -> c
       | _ -> anomaly (str"get_definition for var didn't have definition!")
-  else if isRel t then
-    let n = destRel t in
-    let (_,v,_) = Environ.lookup_rel n env in
+  else if isRel sigma t then
+    let n = destRel sigma t in
+    let v = CRD.get_value (EConstr.lookup_rel n env) in
     match v with
       | Some v -> (lift n) v
       | _ -> anomaly (str"get_definition for rel didn't have definition!")
-  else if isConst t then
-    let c = destConst t in
-    Environ.constant_value_in env c
+  else if isConst sigma t then
+    let c,i = destConst sigma t in
+    of_constr @@ Environ.constant_value_in env (c, EInstance.kind sigma i)
   else
     anomaly (str"get_definition didn't have definition!")
 
 (** Given a defined constant/variable c applied to arguments args it
     unfolds c and returns the new head term d applied to the concatenation
     of arguments. *)
-let get_def_app_stack env (c, args) =
-  let (d, dargs) = decompose_app (get_definition env c) in
+let get_def_app_stack sigma env (c, args) =
+  let (d, dargs) = decompose_app sigma (get_definition sigma env c) in
   (d, dargs @ args)
 
-let try_unfolding ts env t =
-  if has_definition ts env t then
-    get_definition env t
+let try_unfolding sigma ts env t =
+  if has_definition sigma ts env t then
+    get_definition sigma env t
   else
     t
 
@@ -464,24 +459,23 @@ let try_unfolding ts env t =
    with ?e instead of the other way round, and this is in fact tried by the
    unification algorithm.
 *)
-let invert map sigma ctx t subs args ev' =
+let invert map sigma ctx (t : EConstr.t) subs args ev' =
   let sargs = subs @ args in
   let in_subs j = j < List.length ctx in
   let rmap = ref map in
-  let rec invert' inside_evar t i =
-    let t = EU.whd_head_evar sigma t in
-    match kind_of_term t with
+  let rec invert' inside_evar (t : EConstr.t) i =
+    match kind sigma t with
       | Var id ->
-	find_unique_var id sargs >>= fun j ->
+	find_unique_var sigma id sargs >>= fun j ->
 	if in_subs j then
-	  let (name, _, _) = List.nth ctx j in
+	  let name = CND.get_id (List.nth ctx j) in
 	  return (mkVar name)
 	else
 	  return (mkRel (List.length sargs - j + i))
       | Rel j when j > i->
-	find_unique_rel (j-i) sargs >>= fun k ->
+	find_unique_rel sigma (j-i) sargs >>= fun k ->
 	if in_subs k then
-	  let (name, _, _) = List.nth ctx k in
+	  let name = CND.get_id (List.nth ctx k) in
 	  return (mkVar name)
 	else
 	  return (mkRel (List.length sargs - k + i))
@@ -491,7 +485,7 @@ let invert map sigma ctx t subs args ev' =
 
       | Evar (ev, evargs) ->
 	begin
-	  let f (j : int) c  =
+	  let f (j : int) (c : EConstr.t) =
             match invert' true c i with
               | Some c' -> c'
               | _ ->
@@ -511,7 +505,7 @@ let invert map sigma ctx t subs args ev' =
 	  with Exit -> None
 	end
       | _ ->
-	try return (map_constr_with_binders succ (fun i c ->
+	try return (map_with_binders sigma succ (fun i c ->
 	  match invert' inside_evar c i with
 	    | Some c' -> c'
 	    | None -> raise Exit) i t)
@@ -521,28 +515,30 @@ let invert map sigma ctx t subs args ev' =
   return (!rmap, c')
 
 (** True if at least one (named) var in tm is in vars. *)
-let free_vars_intersect tm vars =
-  Names.Idset.exists (fun v -> List.mem v vars) (Termops.collect_vars tm)
+let free_vars_intersect sigma tm vars =
+  Names.Idset.exists (fun v -> List.mem v vars) (Termops.collect_vars sigma (of_constr tm))
 
 let some_or_prop o =
   match o with
-      None -> mkProp
+      None -> Term.mkProp
     | Some tm -> tm
 
 (** Removes the positions in the list, and all dependent elements. *)
-let remove sigma l pos =
+let remove sigma (l : Context.Named.t) pos =
   let l = List.rev l in
-  let rec remove' i l vs =
+  let rec remove' i (l : Context.Named.t) vs =
     match l with
       | [] -> []
-      | ((x, o, t as p) :: s) ->
-        (* Is there a way to avoid nf_evar? *)
+      | (d :: s) ->
+        let o = CND.get_value d in
+        let t = CND.get_type d in
+        let x = CND.get_id d in
         if List.mem i pos
-	  || free_vars_intersect (RO.nf_evar sigma t) vs
-	  || free_vars_intersect (RO.nf_evar sigma (some_or_prop o)) vs then
+	  || free_vars_intersect sigma t vs
+	  || free_vars_intersect sigma (some_or_prop o) vs then
           remove' (i-1) s (x :: vs)
         else
-          (p :: remove' (i-1) s vs)
+          (d :: remove' (i-1) s vs)
   in List.rev (remove' (List.length l-1) l [])
 
 exception CannotPrune
@@ -563,17 +559,15 @@ let rec prune evd (ev, plist) =
   (* the type of the evar may contain an evar depending on the some of
      the vars that we want to prune, so we need to prune that
      as well *)
-  (* Is there a way to avoid nf_evar? *)
-  let concl = RO.nf_evar evd (Evd.evar_concl evi) in
+  let concl = of_constr @@ Evd.evar_concl evi in
   let id_env' = id_substitution env' in
   match invert Evar.Map.empty evd env' concl id_env' [] ev with
       None -> raise CannotPrune
     | Some (m, concl) ->
       let evd = prune_all m evd in
-      let concl = RO.nf_evar evd (Evd.evar_concl evi) in
-      let evd', ev' = EU.new_evar_instance env_val' evd
-	concl id_env' in
-      Evd.define ev ev' evd'
+      let concl = of_constr @@ Evd.evar_concl evi in
+      let evd', ev' = EU.new_evar_instance env_val' evd concl id_env' in
+      Evd.define ev (to_constr evd' ev') evd'
 
 and prune_all map evd =
   List.fold_left prune evd (Evar.Map.bindings map)
@@ -586,10 +580,10 @@ let intersect env sigma s1 s2 =
   let rec intsct i =
     if i < n then
       intsct (i+1) >>= fun l ->
-      if eq_constr s1.(i) s2.(i) then
+      if eq_constr sigma s1.(i) s2.(i) then
         Some l
       else
-        if (isVar s1.(i) || isRel s1.(i)) &&  (isVar s2.(i) || isRel s2.(i)) then
+        if (isVar sigma s1.(i) || isRel sigma s1.(i)) &&  (isVar sigma s2.(i) || isRel sigma s2.(i)) then
           Some (i :: l) (* both position holds variables: they are indeed different *)
         else if is_aggressive () then Some (i :: l)
 	else None
@@ -622,7 +616,7 @@ let fill_lambdas_invert_types map env sigma nc body subst args ev =
     let ars = CList.drop_last ars in
     invert map sigma nc ty subst ars ev >>= fun (m, ty) ->
     rmap := m;
-    return (ars, mkLambda (Namegen.named_hd env ty Anonymous, ty, bdy))) args (return (args, body))
+    return (ars, mkLambda (Namegen.named_hd env sigma ty Anonymous, ty, bdy))) args (return (args, body))
   >>= fun (_, bdy) -> return (!rmap, bdy)
 
 exception ProjectionNotFound
@@ -646,20 +640,20 @@ exception ProjectionNotFound
    object c in structure R (since, if c1 were not an evar, the
    projection would have been reduced) *)
 
-let check_conv_record (t1,l1) (t2,l2) =
+let check_conv_record sigma (t1,l1) (t2,l2) =
   try
-    let proji = Globnames.global_of_constr t1 in
+    let proji,_inst = Termops.global_of_constr sigma t1 in
     let canon_s,l2_effective =
       try
-	match kind_of_term t2 with
+	match kind sigma t2 with
 	    Prod (_,a,b) -> (* assert (l2=[]); *)
-      	      if Termops.dependent (mkRel 1) b then raise Not_found
+      	      if Termops.dependent sigma (mkRel 1) b then raise Not_found
 	      else lookup_canonical_conversion (proji, Prod_cs),[a;Termops.pop b]
 	  | Sort s ->
 	      lookup_canonical_conversion
-		(proji, Sort_cs (family_of_sort s)),[]
+		(proji, Sort_cs (Term.family_of_sort (ESorts.kind sigma s))),[]
 	  | _ ->
-	      let c2 = Globnames.global_of_constr t2 in
+	      let c2,_ = Termops.global_of_constr sigma t2 in
 		Recordops.lookup_canonical_conversion (proji, Const_cs c2),l2
       with Not_found ->
 	lookup_canonical_conversion (proji, Default_cs),[]
@@ -680,36 +674,39 @@ let evar_apprec ts env sigma (c, stack) =
   let rec aux s =
     let ((t,stack),cststack) =
       RO.(whd_betaiota_deltazeta_for_iota_state ts env sigma Cst_stack.empty s) in
-    match kind_of_term t with
-    | Evar (evk,_ as ev) when Evd.is_defined sigma evk ->
-      aux (Evd.existential_value sigma ev, stack)
+    match kind sigma t with
+    | Evar (evk,eva) when Evd.is_defined sigma evk ->
+      (* XXX: Econstr.API *)
+      let eva = Array.map (to_constr sigma) eva in
+      aux (of_constr @@ Evd.existential_value sigma (evk,eva), stack)
     | _ ->
       match RO.Stack.list_of_app_stack stack with
-      | None -> decompose_app (RO.Stack.zip (t, stack))
+      | None -> decompose_app sigma (RO.Stack.zip sigma (t, stack))
       | Some stack -> (t, stack)
   in aux (c, RO.Stack.append_app_list stack RO.Stack.empty)
 
-let eq_app_stack (c, l) (c', l') =
-  Term.eq_constr c c' && List.for_all2 Term.eq_constr l l'
+let eq_app_stack sigma (c, l) (c', l') =
+  eq_constr sigma c c' && List.for_all2 (eq_constr sigma) l l'
 
 let remove_non_var env sigma (ev, subs as evsubs) args =
   let ps = CArray.fold_right_i (fun i a s ->
-    if isVarOrRel a && not (array_mem_to_i a i subs || List.mem a args) then s
+    if isVarOrRel sigma a && not (array_mem_to_i a i subs || List.mem a args) then s
     else i::s) subs [] in
   if ps = [] then raise CannotPrune
   else
     let sigma' = prune sigma (ev, ps) in
-    (sigma', RO.nf_evar sigma' (mkEvar evsubs), args)
+    (sigma', mkEvar evsubs, args)
 
 let specialize_evar env sigma (ev, subs) args =
   match args with
   | [] -> raise CannotPrune
   | hd :: tl ->
-    let sigma', lam = EU.define_evar_as_lambda env sigma (ev, subs) in
-    let (n, dom, codom) = destLambda (EU.nf_evar sigma' lam) in
+    let sigma', lam = Evardefine.define_evar_as_lambda env sigma (ev, subs) in
+    let (n, dom, codom) = destLambda sigma' lam in
       sigma', subst1 hd codom, tl
 
-exception InternalException
+(* EJGA: Not used *)
+(* exception InternalException *)
 
 (** {2 The function} *)
 
@@ -737,7 +734,7 @@ module type Unifier = sig
 
   val unify_constr : ?conv_t:R.conv_pb ->
     Environ.env ->
-    Term.constr -> Term.constr -> Logger.log * Evd.evar_map -> unif
+    EConstr.t -> EConstr.t -> Logger.log * Evd.evar_map -> unif
 end
 
 module type UnifT = functor (P : Params) -> Unifier
@@ -752,17 +749,17 @@ module Inst = functor (U : Unifier) -> struct
       (Avoids unnecessary eta-expansions.) It needs to check that no
       solution is lost, meaning that the variable being removed is not
       duplicated in any of the spines or bodies. *)
-  let remove_equal_tail (h, args) (h', args') =
+  let remove_equal_tail sigma (h, args) (h', args') =
     let rargs = List.rev args in
     let rargs' = List.rev args' in
-    let noccur i xs ys =
-      not (Termops.occur_term i h')
-      && not (Termops.occur_term i h)
-      && not (List.exists (Termops.occur_term i) ys)
-      && not (List.exists (Termops.occur_term i) xs) in
+    let noccur sigma i xs ys =
+      not (Termops.occur_term sigma i h')
+      && not (Termops.occur_term sigma i h)
+      && not (List.exists (Termops.occur_term sigma i) ys)
+      && not (List.exists (Termops.occur_term sigma i) xs) in
     let rec remove rargs rargs' =
       match rargs, rargs' with
-      | (x :: xs), (y :: ys) when eq_constr x y && noccur x xs ys -> remove xs ys
+      | (x :: xs), (y :: ys) when eq_constr sigma x y && noccur sigma x xs ys -> remove xs ys
       | _, _ -> rargs, rargs'
     in
     let (xs, ys) = remove rargs rargs' in
@@ -770,7 +767,7 @@ module Inst = functor (U : Unifier) -> struct
 
   (* pre: args and args' are lists of vars and/or rels. subs is an array of rels and vars. *)
   let instantiate' dir conv_t env (ev, subs as uv) args (h, args') (dbg, sigma0) =
-    let args, args' = remove_equal_tail (mkEvar uv, args) (h, args') in
+    let args, args' = remove_equal_tail sigma0 (mkEvar uv, args) (h, args') in
     (* beta-reduce to remove dependencies *)
     let t = RO.whd_beta sigma0 (applist (h, args')) in
     let evi = Evd.find_undefined sigma0 ev in
@@ -780,20 +777,21 @@ module Inst = functor (U : Unifier) -> struct
       invert Evar.Map.empty sigma0 nc t subsl args ev >>= fun (map, t') ->
       fill_lambdas_invert_types map env sigma0 nc t' subsl args ev >>= fun (map, t') ->
       let sigma1 = prune_all map sigma0 in
-      let t' = Evarutil.nf_evar sigma1 t' in
       let sigma1, t' =
 	Evarsolve.refresh_universes
-	    (if conv_t == R.CUMUL && isArity t' then
+	    (if conv_t == R.CUMUL && isArity sigma1 t' then
 	      (* ?X <= Type(i) -> X := Type j, j <= i *)
 	      (* Type(i) <= X -> X := Type j, i <= j *)
 	      Some (dir == Original)
 	   else None)
 	    (Environ.push_named_context nc env) sigma1 t' in
-      let t'' = instantiate_evar nc t' subsl in
-      let ty = Evd.existential_type sigma1 uv in
+      let t'' = instantiate_evar sigma1 nc t' subsl in
+      (* XXX: EConstr.API *)
+      let subs = Array.map (to_constr sigma1) subs in
+      let ty = Evd.existential_type sigma1 (ev,subs) in
       let unifty =
 	try
-	  match kind_of_term t'' with
+	  match kind sigma1 t'' with
 	  | Evar (evk2, _) ->
             (* ?X : Π Δ. Type i = ?Y : Π Δ'. Type j.
 	       The body of ?X and ?Y just has to be of type Π Δ. Type k for some k <= i, j. *)
@@ -802,33 +800,32 @@ module Inst = functor (U : Unifier) -> struct
 	    let evi2 = Evd.find sigma1 evk2 in
 	    let evi2env = Evd.evar_env evi2 in
 	    let ctx2, j = R.dest_arity evi2env evi2.Evd.evar_concl in
-	    let ui, uj = univ_of_sort i, univ_of_sort j in
+	    let ui, uj = Sorts.univ_of_sort i, Sorts.univ_of_sort j in
 	    if i == j || Evd.check_eq sigma1 ui uj then (* Shortcut, i = j *)
 	      Success (dbg, sigma1)
 	    else if Evd.check_leq sigma1 ui uj then
-              let t2 = it_mkProd_or_LetIn (mkSort i) ctx2 in
-	      Success (dbg, Evd.downcast evk2 t2 sigma1)
+              let t2 = it_mkProd_or_LetIn (mkSort i) (List.map of_rel_decl ctx2) in
+	      Success (dbg, Evd.downcast evk2 (to_constr sigma1 t2) sigma1)
             else if Evd.check_leq sigma1 uj ui then
-	      let t1 = it_mkProd_or_LetIn (mkSort j) ctx1 in
-              Success (dbg, Evd.downcast ev t1 sigma1)
+	      let t1 = it_mkProd_or_LetIn (mkSort j) (List.map of_rel_decl ctx1) in
+              Success (dbg, Evd.downcast ev (to_constr sigma1 t1) sigma1)
 	    else
               let sigma1, k = Evd.new_sort_variable Evd.univ_flexible_alg sigma1 in
-	      let t1 = it_mkProd_or_LetIn (mkSort k) ctx1 in
-	      let t2 = it_mkProd_or_LetIn (mkSort k) ctx2 in
+	      let t1 = it_mkProd_or_LetIn (mkSort k) (List.map of_rel_decl ctx1) in
+	      let t2 = it_mkProd_or_LetIn (mkSort k) (List.map of_rel_decl ctx2) in
 	      let sigma1 = Evd.set_leq_sort env (Evd.set_leq_sort env sigma1 k i) k j in
-	      Success (dbg, Evd.downcast evk2 t2 (Evd.downcast ev t1 sigma1))
+	      Success (dbg, Evd.downcast evk2 (to_constr sigma1 t2) (Evd.downcast ev (to_constr sigma1 t1) sigma1))
 	  | _ -> raise R.NotArity
 	  with R.NotArity ->
 	    let ty' = Retyping.get_type_of env sigma1 t'' in
-            U.unify_constr ~conv_t:R.CUMUL env ty' ty (dbg, sigma1)
+            U.unify_constr ~conv_t:R.CUMUL env ty' (of_constr ty) (dbg, sigma1)
 	in
 	let p = unifty &&= fun (dbg, sigma2) ->
-	  let t' = RO.nf_evar sigma2 t' in
-	    if Termops.occur_meta t' (* || Termops.occur_evar ev t' *) then
+	    if Termops.occur_meta sigma2 t' (* || Termops.occur_evar ev t' *) then
 	      Err dbg
 	    else
 	      (dstats.instantiations <- succ_big_int dstats.instantiations;
-	       Success (dbg, Evd.define ev t' sigma2))
+	       Success (dbg, Evd.define ev (to_constr sigma2 t') sigma2))
 	in
 	  Some p
     in
@@ -890,19 +887,19 @@ module struct
       an evar, returning the new head and list of arguments.
   *)
   let decompose_evar sigma (c, l) =
-    let (c', l') = decompose_app (Evarutil.whd_head_evar sigma c) in
+    let (c', l') = decompose_app sigma c in
     (c', l' @ l)
 
   (** {3 "The Function" is split into several} *)
   let rec unify' ?(conv_t=R.CONV) env t t' (dbg, sigma) =
-    assert (not (isApp (fst t) || isApp (fst t')));
+    assert (not (isApp sigma (fst t) || isApp sigma (fst t')));
     let (c, l as t) = decompose_evar sigma t in
     let (c', l' as t') = decompose_evar sigma t' in
-    if !dump then debug_eq sigma env conv_t t t' 0;
+    if !dump then debug_eq env sigma conv_t t t' 0;
     try_conv conv_t env t t' (dbg, sigma) ||= fun dbg ->
       try_hash env t t' (dbg, sigma) &&= fun (dbg, sigma) ->
         let res =
-          if isEvar c || isEvar c' then
+          if isEvar sigma c || isEvar sigma c' then
             one_is_meta dbg conv_t env sigma t t'
           else
             begin
@@ -916,8 +913,8 @@ module struct
           Hashtbl.add tbl (sigma, env, t, t') true;
         res
 
-  and unify_constr ?(conv_t=R.CONV) env t t' =
-    unify' ~conv_t env (decompose_app t) (decompose_app t')
+  and unify_constr ?(conv_t=R.CONV) env t t' (dbg, sigma) =
+    unify' ~conv_t env (decompose_app sigma t) (decompose_app sigma t') (dbg,sigma)
 
   and unify_evar_conv env sigma0 conv_t t t' =
     let interesting log = (* if it's not just Reduce-Same *)
@@ -944,11 +941,11 @@ module struct
       unification. At some point I need to either remove this, or
       prove it is an useful thing to have... *)
   and try_run_and_unify env (c, l as t) (c', l' as t') sigma dbg =
-    if (isConst c || isConst c') && not (eq_constr c c') then
+    if (isConst sigma c || isConst sigma c') && not (eq_constr sigma c c') then
       begin
-        if is_lift c && List.length l = 3 then
+        if is_lift sigma c && List.length l = 3 then
 	  run_and_unify dbg env sigma l t'
-        else if is_lift c' && List.length l' = 3 then
+        else if is_lift sigma c' && List.length l' = 3 then
 	  run_and_unify dbg env sigma l' t
         else
 	  Err dbg
@@ -958,13 +955,13 @@ module struct
 
   and run_and_unify dbg env sigma0 args ty =
     let a, f, v = List.nth args 0, List.nth args 1, List.nth args 2 in
-    unify' ~conv_t:R.CUMUL env (decompose_app a) ty (dbg, sigma0) &&= fun (dbg, sigma1) ->
+    unify' ~conv_t:R.CUMUL env (decompose_app sigma0 a) ty (dbg, sigma0) &&= fun (dbg, sigma1) ->
       match !run_function env sigma1 f with
-      | Some (sigma2, v') -> unify' env (decompose_app v) (decompose_app v') (dbg, sigma2)
+      | Some (sigma2, v') -> unify' env (decompose_app sigma2 v) (decompose_app sigma2 v') (dbg, sigma2)
       | _ -> Err dbg
 
   and try_canonical_structures env (c, _ as t) (c', _ as t') sigma dbg =
-    if (isConst c || isConst c') && not (eq_constr c c') then
+    if (isConst sigma c || isConst sigma c') && not (eq_constr sigma c c') then
       try conv_record dbg env sigma t t'
       with ProjectionNotFound ->
       try conv_record dbg env sigma t' t
@@ -973,23 +970,24 @@ module struct
       Err dbg
 
   and conv_record dbg env evd t t' =
-    let (c,bs,(params,params1),(us,us2),(ts,ts1),c1,(n,t2)) = check_conv_record t t' in
+    let (c,bs,(params,params1),(us,us2),(ts,ts1),c1,(n,t2)) = check_conv_record evd t t' in
     let (evd',ks,_) =
       List.fold_left
         (fun (i,ks,m) b ->
 	   match n with
            | Some n when m = n -> (i,t2::ks, m-1)
            | _ ->
-             let dloc = (Loc.dummy_loc, Evar_kinds.InternalHole) in
-             let (i',ev) = Evarutil.new_evar env i ~src:dloc (substl ks b) in
-             (i', ev :: ks, m - 1))
-        (evd,[],List.length bs) bs
+             let dloc = Loc.tag @@ Evar_kinds.InternalHole in
+             let sigma = i in
+             let sigma, ev = Evarutil.new_evar env sigma ~src:dloc (substl ks b) in
+             (sigma, ev :: ks, m - 1))
+        (evd,[],List.length bs) (List.map of_constr bs)
     in
     report (
       log_eq_spine env "CS" R.CONV t t' (dbg, evd') &&=
-      ise_list2 (fun x1 x -> unify_constr env x1 (substl ks x)) params1 params &&=
-      ise_list2 (fun u1 u -> unify_constr env u1 (substl ks u)) us2 us &&=
-      unify' env (decompose_app c1) (c,(List.rev ks)) &&=
+      ise_list2 (fun x1 x -> unify_constr env x1 (substl ks x)) params1 (List.map of_constr params) &&=
+      ise_list2 (fun u1 u -> unify_constr env u1 (substl ks u)) us2 (List.map of_constr us) &&=
+      unify' env (decompose_app evd' c1) (of_constr c,(List.rev ks)) &&=
       ise_list2 (unify_constr env) ts ts1)
 
   and try_app_fo conv_t env (c, l as t) (c', l' as t') sigma dbg =
@@ -1005,12 +1003,8 @@ module struct
       Err dbg
 
   and one_is_meta dbg conv_t env sigma0 (c, l as t) (c', l' as t') =
-    (* first we instantiate all defined metas *)
-    let nf_map = List.map (fun a->RO.nf_evar sigma0 a) in
-    let (c, l) = (RO.nf_evar sigma0 c, nf_map l) in
-    let (c', l') = (RO.nf_evar sigma0 c', nf_map l') in
-    if isEvar c && isEvar c' then
-      let (k1, s1 as e1), (k2, s2 as e2) = destEvar c, destEvar c' in
+    if isEvar sigma0 c && isEvar sigma0 c' then
+      let (k1, s1 as e1), (k2, s2 as e2) = destEvar sigma0 c, destEvar sigma0 c' in
       if k1 = k2 then
         (* Meta-Same *)
         begin
@@ -1047,23 +1041,25 @@ module struct
           ||= try_solve_simple_eqn conv_t env var1 term1 sigma0
         end
     else
-    if isEvar c then
-      if is_lift c' && List.length l' = 3 then
+    if isEvar sigma0 c then
+      if is_lift sigma0 c' && List.length l' = 3 then
         run_and_unify dbg env sigma0 l' t
       else
-        let e1 = destEvar c in
+        let e1 = destEvar sigma0 c in
         instantiate conv_t env (e1, l) t' sigma0 dbg
+
     else
-    if is_lift c && List.length l = 3 then
-      run_and_unify dbg env sigma0 l t'
+    if is_lift sigma0 c && List.length l = 3 then
+      run_and_unify dbg env sigma0 l t
     else
-      let e2 = destEvar c' in
+      let e2 = destEvar sigma0 c' in
       instantiate ~dir:Swap conv_t env (e2, l') t sigma0 dbg
 
   and try_solve_simple_eqn ?(dir=Original) conv_t env (evsubs, args) t sigma dbg =
     if get_solving_eqn () then
       try
-        let t = Evarsolve.solve_pattern_eqn env args (applist t) in
+        (* XXXXXX: Why the [] here!! *)
+        let t = Evarsolve.solve_pattern_eqn env sigma [] (applist t) in
         let pbty = match conv_t with
 	    R.CONV -> None
           | R.CUMUL -> Some (dir == Original)
@@ -1071,7 +1067,7 @@ module struct
 	match Evarsolve.solve_simple_eqn unify_evar_conv env sigma (pbty, evsubs, t) with
           Evarsolve.Success sigma' ->
           Printf.printf "%s" "solve_simple_eqn solved it: ";
-	  debug_eq sigma env R.CONV (mkEvar evsubs, []) (decompose_app t) 0;
+	  debug_eq env sigma R.CONV (mkEvar evsubs, []) (decompose_app sigma t) 0;
 	  Success (dbg, sigma')
 	| Evarsolve.UnifFailure (sigma', error) -> Err dbg
       with _ ->
@@ -1083,6 +1079,7 @@ module struct
   and compare_heads conv_t env c c' (dbg, sigma0) =
     let rigid_same sigma = report (log_eq env "Rigid-Same" conv_t c c' (dbg, sigma)) in
     let rigid_same_univs sigma0 flex u1 u2 =
+      let u1, u2 = EInstance.kind sigma0 u1, EInstance.kind sigma0 u2 in
       try let sigma1 = Evd.set_eq_instances ~flex sigma0 u1 u2 in
           rigid_same sigma1
       with Univ.UniverseInconsistency e ->
@@ -1090,15 +1087,15 @@ module struct
           (Pp.string_of_ppcmds (Univ.explain_universe_inconsistency Univ.Level.pr e))) 0;
         report (Err dbg)
     in
-    match (kind_of_term c, kind_of_term c') with
+    match (kind sigma0 c, kind sigma0 c') with
     (* Type-Same *)
     | Sort s1, Sort s2 ->
       log_eq env "Type-Same" conv_t c c' (dbg, sigma0) &&= fun (dbg, sigma0) ->
         begin
           try
 	    let sigma1 = match conv_t with
-              | R.CONV -> Evd.set_eq_sort env sigma0 s1 s2
-	      | R.CUMUL -> Evd.set_leq_sort env sigma0 s1 s2
+              | R.CONV -> Evd.set_eq_sort env sigma0 (ESorts.kind sigma0 s1) (ESorts.kind sigma0 s2)
+	      | R.CUMUL -> Evd.set_leq_sort env sigma0 (ESorts.kind sigma0 s1) (ESorts.kind sigma0 s2)
             in
             report (Success (dbg, sigma1))
           with Univ.UniverseInconsistency e ->
@@ -1109,7 +1106,7 @@ module struct
 
     (* Lam-Same *)
     | Lambda (name, t1, c1), Lambda (_, t2, c2) ->
-      let env' = Environ.push_rel (name, None, t1) env in
+      let env' = EConstr.push_rel (crd_of_tuple (name, None, t1)) env in
       report (
         log_eq env "Lam-Same" conv_t c c' (dbg, sigma0) &&=
         unify_constr env t1 t2 &&=
@@ -1120,11 +1117,11 @@ module struct
       report (
         log_eq env "Prod-Same" conv_t c c' (dbg, sigma0) &&=
         unify_constr env t1 t2 &&=
-        unify_constr ~conv_t (Environ.push_rel (name,None,t1) env) c1 c2)
+        unify_constr ~conv_t (EConstr.push_rel (crd_of_tuple (name,None,t1)) env) c1 c2)
 
     | LetIn (name, trm1, ty1, body1), LetIn (_, trm2, ty2, body2) ->
       (* Let-Same *)
-      let env' = Environ.push_rel (name, Some trm1, ty1) env in
+      let env' = EConstr.push_rel (crd_of_tuple (name, Some trm1, ty1)) env in
       report (
         log_eq env "Let-Same" conv_t c c' (dbg, sigma0) &&=
         unify_constr env trm1 trm2 &&=
@@ -1135,7 +1132,7 @@ module struct
       rigid_same sigma0
     | Var id1, Var id2 when Id.equal id1 id2 ->
       rigid_same sigma0
-    | Const (c1,u1), Const (c2,u2) when Names.eq_constant c1 c2 ->
+    | Const (c1,u1), Const (c2,u2) when Names.Constant.equal c1 c2 ->
       rigid_same_univs sigma0 (Environ.evaluable_constant c1 env) u1 u2
     | Ind (c1,u1), Ind (c2,u2) when Names.eq_ind c1 c2 ->
       rigid_same_univs sigma0 false u1 u2
@@ -1147,7 +1144,7 @@ module struct
       report (
         log_eq env "CoFix-Same" conv_t c c' (dbg, sigma0) &&=
         ise_array2 (unify_constr env) tys1 tys2 &&=
-        ise_array2 (unify_constr (Environ.push_rec_types recdef1 env)) bds1 bds2)
+        ise_array2 (unify_constr (push_rec_types_econstr sigma0 recdef1 env)) bds1 bds2)
 
     | Case (_, p1, c1, cl1), Case (_, p2, c2, cl2) ->
       report (
@@ -1161,22 +1158,25 @@ module struct
       report (
         log_eq env "Fix-Same" conv_t c c' (dbg, sigma0) &&=
         ise_array2 (unify_constr env) tys1 tys2 &&=
-        ise_array2 (unify_constr (Environ.push_rec_types recdef1 env)) bds1 bds2)
+        ise_array2 (unify_constr (push_rec_types_econstr sigma0 recdef1 env)) bds1 bds2)
 
     | _, _ -> Err dbg
 
+  and push_rec_types_econstr sigma (a, l, m) env =
+    Environ.push_rec_types (a, Array.map (to_constr sigma) l, Array.map (to_constr sigma) m) env
+
   and try_step ?(stuck=NotStucked) conv_t env (c, l as t) (c', l' as t') sigma0 dbg =
-    match (kind_of_term c, kind_of_term c') with
+    match (kind sigma0 c, kind sigma0 c') with
     (* Lam-BetaR *)
     | _, Lambda (_, _, trm) when reduce_right && not (CList.is_empty l') ->
-      let (c2, l2) = decompose_app (subst1 (List.hd l') trm) in
+      let (c2, l2) = decompose_app sigma0 (subst1 (List.hd l') trm) in
       let t2 = (c2, l2 @ List.tl l') in
       report (
         log_eq_spine env "Lam-BetaR" conv_t t t' (dbg, sigma0) &&=
         unify' ~conv_t env t t2)
 
     | _, LetIn (_, trm, _, body) when reduce_right ->
-      let (c2, l2) = decompose_app (subst1 trm body) in
+      let (c2, l2) = decompose_app sigma0 (subst1 trm body) in
       let t2 = (c2, l2 @ l') in
       report (
         log_eq_spine env "Let-ZetaR" conv_t t t' (dbg, sigma0) &&=
@@ -1184,7 +1184,7 @@ module struct
 
     | _, Case _ | _, Fix _ when reduce_right && stuck != StuckedRight ->
       let t2 = evar_apprec P.ts env sigma0 t' in
-      if not (eq_app_stack t' t2) then
+      if not (eq_app_stack sigma0 t' t2) then
         begin report (
             log_eq_spine env "Case-IotaR" conv_t t t' (dbg, sigma0) &&=
 	    unify' ~conv_t env t t2)
@@ -1195,14 +1195,14 @@ module struct
 
     (* Lam-BetaL *)
     | Lambda (_, _, trm), _ when reduce_left && not (CList.is_empty l) ->
-      let (c1, l1) = decompose_app (subst1 (List.hd l) trm) in
+      let (c1, l1) = decompose_app sigma0 (subst1 (List.hd l) trm) in
       let t1 = (c1, l1 @ List.tl l) in
       report (
         log_eq_spine env "Lam-BetaL" conv_t t t' (dbg, sigma0) &&=
         unify' ~conv_t env t1 t')
     (* Let-ZetaL *)
     | LetIn (_, trm, _, body), _ when reduce_left ->
-      let (c1, l1) = decompose_app (subst1 trm body) in
+      let (c1, l1) = decompose_app sigma0 (subst1 trm body) in
       let t1 = (c1, l1 @ l) in
       report (
         log_eq_spine env "Let-ZetaL" conv_t t t' (dbg, sigma0) &&=
@@ -1210,7 +1210,7 @@ module struct
 
     | Case _, _ | Fix _, _ when reduce_left && stuck != StuckedLeft ->
       let t2 = evar_apprec P.ts env sigma0 t in
-      if not (eq_app_stack t t2) then
+      if not (eq_app_stack sigma0 t t2) then
 	begin report (
           log_eq_spine env "Case-IotaL" conv_t t t' (dbg, sigma0) &&=
 	  unify' ~conv_t env t2 t')
@@ -1222,39 +1222,39 @@ module struct
     (* Constants get unfolded after everything else *)
     | _, Const _
     | _, Rel _
-    | _, Var _ when reduce_right && has_definition P.ts env c' && stuck == NotStucked ->
+    | _, Var _ when reduce_right && has_definition sigma0 P.ts env c' && stuck == NotStucked ->
       if is_stuck env sigma0 t' then
         try_step ~stuck:StuckedRight conv_t env t t' sigma0 dbg
       else report (
           log_eq_spine env "Cons-DeltaNotStuckR" conv_t t t' (dbg, sigma0) &&=
-          unify' ~conv_t env t (evar_apprec P.ts env sigma0 (get_def_app_stack env t')))
+          unify' ~conv_t env t (evar_apprec P.ts env sigma0 (get_def_app_stack sigma0 env t')))
     | Const _, _
     | Rel _, _
-    | Var _, _  when reduce_left && has_definition P.ts env c && stuck == StuckedRight ->
+    | Var _, _  when reduce_left && has_definition sigma0 P.ts env c && stuck == StuckedRight ->
       report (
         log_eq_spine env "Cons-DeltaStuckL" conv_t t t'  (dbg, sigma0) &&=
-        unify' ~conv_t env (evar_apprec P.ts env sigma0 (get_def_app_stack env t)) t')
+        unify' ~conv_t env (evar_apprec P.ts env sigma0 (get_def_app_stack sigma0 env t)) t')
 
     | _, Const _
     | _, Rel _
-    | _, Var _ when reduce_right && has_definition P.ts env c' ->
+    | _, Var _ when reduce_right && has_definition sigma0 P.ts env c' ->
       report (
         log_eq_spine env "Cons-DeltaR" conv_t t t' (dbg, sigma0) &&=
-        unify' ~conv_t env t (evar_apprec P.ts env sigma0 (get_def_app_stack env t')))
+        unify' ~conv_t env t (evar_apprec P.ts env sigma0 (get_def_app_stack sigma0 env t')))
     | Const _, _
     | Rel _, _
-    | Var _, _  when reduce_left && has_definition P.ts env c ->
+    | Var _, _  when reduce_left && has_definition sigma0 P.ts env c ->
       report (
         log_eq_spine env "Cons-DeltaL" conv_t t t' (dbg, sigma0) &&=
-        unify' ~conv_t env (evar_apprec P.ts env sigma0 (get_def_app_stack env t)) t')
+        unify' ~conv_t env (evar_apprec P.ts env sigma0 (get_def_app_stack sigma0 env t)) t')
 
     (* Lam-EtaR *)
-    | _, Lambda (name, t1, c1) when reduce_right && CList.is_empty l' && not (isLambda c) ->
+    | _, Lambda (name, t1, c1) when reduce_right && CList.is_empty l' && not (isLambda sigma0 c) ->
       report (
         log_eq_spine env "Lam-EtaR" conv_t t t' (dbg, sigma0) &&=
         eta_match conv_t env (name, t1, c1) t)
     (* Lam-EtaL *)
-    | Lambda (name, t1, c1), _ when reduce_left && CList.is_empty l && not (isLambda c') ->
+    | Lambda (name, t1, c1), _ when reduce_left && CList.is_empty l && not (isLambda sigma0 c') ->
       report (
         log_eq_spine env "Lam-EtaL" conv_t t t' (dbg, sigma0) &&=
         eta_match conv_t env (name, t1, c1) t')
@@ -1262,8 +1262,8 @@ module struct
     | _, _ -> Err dbg
 
   and is_stuck env sigma (hd, args) =
-    let (hd, args) = evar_apprec P.ts env sigma (try_unfolding P.ts env hd, args) in
-    let rec is_unnamed (hd, args) = match kind_of_term hd with
+    let (hd, args) = evar_apprec P.ts env sigma (try_unfolding sigma P.ts env hd, args) in
+    let rec is_unnamed (hd, args) = match kind sigma hd with
       | (Var _|Construct _|Ind _|Const _|Prod _|Sort _) -> false
       | (Case _|Fix _|CoFix _|Meta _|Rel _)-> true
       | Evar _ -> false (* immediate solution without Canon Struct *)
@@ -1274,7 +1274,7 @@ module struct
     in is_unnamed (hd, args)
 
   and meta_inst dir conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
-    if must_inst dir ev && is_variable_subs subs && is_variable_args args then
+    if must_inst dir ev && is_variable_subs sigma subs && is_variable_args sigma args then
       begin
         try
           let module P' = (struct
@@ -1318,9 +1318,9 @@ module struct
   and meta_reduce dir conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
     (* Meta-Reduce: before giving up we see if we can reduce on the right *)
     if must_inst dir ev then
-      if has_definition P.ts env h then
+      if has_definition sigma P.ts env h then
         begin
-          let t' = evar_apprec P.ts env sigma (get_def_app_stack env t) in
+          let t' = evar_apprec P.ts env sigma (get_def_app_stack sigma env t) in
           report (
             log_eq_spine env "Meta-Reduce" conv_t (mkEvar evsubs, args) t (dbg, sigma) &&=
             switch dir (unify' ~conv_t env) (mkEvar evsubs, args) t')
@@ -1328,7 +1328,7 @@ module struct
       else
         begin
           let t' = evar_apprec P.ts env sigma t in
-          if not (eq_app_stack t t') then
+          if not (eq_app_stack sigma t t') then
             begin
               report (
                 log_eq_spine env "Meta-Reduce" conv_t (mkEvar evsubs, args) t (dbg, sigma) &&=
@@ -1341,11 +1341,11 @@ module struct
 
   and meta_eta dir conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
     (* if the equation is [?f =?= \x.?f x] the occurs check will fail, but there is a solution: eta expansion *)
-    if must_inst dir ev && isLambda h && List.length args' = 0 then
+    if must_inst dir ev && isLambda sigma h && List.length args' = 0 then
       begin
         report (
           log_eq_spine env "Lam-Eta" conv_t (mkEvar evsubs, args) t (dbg, sigma) &&=
-          eta_match conv_t env (destLambda h) (mkEvar evsubs, args))
+          eta_match conv_t env (destLambda sigma h) (mkEvar evsubs, args))
       end
     else
       Err dbg
@@ -1384,17 +1384,17 @@ module struct
 
   (* unifies ty with a product type from {name : a} to some Type *)
   and check_product dbg env sigma ty (name, a) =
-    let nc = Environ.named_context env in
-    let naid = Namegen.next_name_away name (Termops.ids_of_named_context nc) in
-    let nc' = (naid, None, a) :: nc in
+    let nc = EConstr.named_context env in
+    let naid = Namegen.next_name_away name (Id.Set.of_list @@ Termops.ids_of_named_context nc) in
+    let nc' = CND.of_tuple (naid, None, a) :: nc in
     let sigma', univ = Evd.new_univ_variable Evd.univ_flexible sigma in
-    let evi = Evd.make_evar (Environ.val_of_named_context nc') (mkType univ) in
+    let evi = Evd.make_evar (EConstr.val_of_named_context nc') (Constr.mkType univ) in
     let sigma'',v = Evarutil.new_pure_evar_full sigma' evi in
     let idsubst = Array.of_list (mkRel 1 :: id_substitution nc) in
     unify_constr ~conv_t:R.CUMUL env ty (mkProd (Names.Name naid, a, mkEvar(v, idsubst))) (dbg, sigma'')
 
   and eta_match conv_t env (name, a, t1) (th, tl as t) (dbg, sigma0 ) =
-    let env' = Environ.push_rel (name, None, a) env in
+    let env' = EConstr.push_rel (crd_of_tuple (name, None, a)) env in
     let t' = applist (lift 1 th, List.map (lift 1) tl @ [mkRel 1]) in
     let ty = Retyping.get_type_of env sigma0 (applist t) in
     check_product dbg env sigma0 ty (name, a) &&=
@@ -1437,7 +1437,6 @@ let set_use_munify b =
   munify_on := b
 
 let _ = Goptions.declare_bool_option {
-  Goptions.optsync = true;
   Goptions.optdepr = false;
   Goptions.optname = "Enable use of new unification algorithm";
   Goptions.optkey = ["Use";"Unicoq"];

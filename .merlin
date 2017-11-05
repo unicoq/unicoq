@@ -1,0 +1,6 @@
+FLG -rectypes -thread -w @1..50@59-4 -safe-string
+
+S src
+B src
+
+PKG threads threads.posix coq.intf coq.ltac coq.idetop

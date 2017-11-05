@@ -7,17 +7,17 @@ type log_elem = string * (Reduction.conv_pb * string * string)
 
 type log = log_elem nlog ref
 
-let state l =
+let _state l =
   match !l with
     Initial -> true
   | Node (_, _, s, _) -> s
 
-let children l =
+let _children l =
   match !l with
     Initial -> []
   | Node (_, _, _, c) -> c
 
-let value l =
+let _value l =
   match !l with
     Initial -> []
   | Node (v, _, _, _) -> v
@@ -31,7 +31,7 @@ let init = ref Initial
 
 let is_init l = match !l with Initial -> true | _ -> false
 
-let currentNode l = !l
+let _currentNode l = !l
 
 let rec pad l = 
   if l <= 0 then () else (Printf.printf "_"; pad (l-1))
@@ -74,7 +74,7 @@ let reportErr = report false
 let rec to_parent l =
   match !(parent l) with
   | Initial -> l
-  | Node (_, p, _, _) -> to_parent (parent l)
+  | Node (_, _p, _, _) -> to_parent (parent l)
 
 let rec print_to_stdout i l =
   match !l with
