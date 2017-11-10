@@ -21,3 +21,9 @@ val unify_match : Evar.Set.t -> Names.transparent_state -> Evarsolve.conv_fun
 val unify_match_nored : Evar.Set.t -> Names.transparent_state -> Evarsolve.conv_fun
 
 val get_stats : unit -> stats
+
+(** Mtac execution of tactics *)
+val set_run : (Environ.env ->
+               Evd.evar_map ->
+               Term.constr -> (Evd.evar_map * Term.constr) option) -> unit
+val set_lift_constr : Term.types Lazy.t -> unit
