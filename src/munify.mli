@@ -25,5 +25,5 @@ val get_stats : unit -> stats
 (** Mtac execution of tactics *)
 val set_run : (Environ.env ->
                Evd.evar_map ->
-               Term.constr -> (Evd.evar_map * Term.constr) option) -> unit
-val set_lift_constr : Term.types Lazy.t -> unit
+               EConstr.constr -> (Evd.evar_map * EConstr.t) option) -> unit
+val set_lift_constr : EConstr.t Lazy.t -> unit

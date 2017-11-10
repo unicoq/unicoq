@@ -321,10 +321,10 @@ let print_eq f (conv_t, c1, c2) =
 (** This is used in Beta's thesis, although it isn't fully studied.
     We leave it for now, but it might get GC at some point. *)
 let run_function = ref (fun _ _ _ -> None)
-let _set_run f = run_function := f
+let set_run f = run_function := f
 
 let lift_constr = ref (lazy mkProp)
-let _set_lift_constr c = lift_constr := c
+let set_lift_constr c = lift_constr := c
 
 let is_lift sigma c =
   try eq_constr sigma c (Lazy.force !lift_constr)
