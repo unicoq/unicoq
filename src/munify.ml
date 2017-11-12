@@ -323,11 +323,12 @@ let print_eq f (conv_t, c1, c2) =
 let run_function = ref (fun _ _ _ -> None)
 let set_run f = run_function := f
 
-let lift_constr = ref (lazy mkProp)
+let lift_constr = ref (fun _ sigma -> sigma, mkProp)
 let set_lift_constr c = lift_constr := c
 
-let is_lift sigma c =
-  try eq_constr sigma c (Lazy.force !lift_constr)
+let is_lift env sigma c =
+  let sigma, c' = !lift_constr env sigma in
+  try eq_constr_nounivs sigma c c'
   with Not_found -> false
 
 
@@ -947,9 +948,9 @@ module struct
   and try_run_and_unify env (c, l as t) (c', l' as t') sigma dbg =
     if (isConst sigma c || isConst sigma c') && not (eq_constr sigma c c') then
       begin
-        if is_lift sigma c && List.length l = 3 then
+        if is_lift env sigma c && List.length l = 3 then
 	  run_and_unify dbg env sigma l t'
-        else if is_lift sigma c' && List.length l' = 3 then
+        else if is_lift env sigma c' && List.length l' = 3 then
 	  run_and_unify dbg env sigma l' t
         else
 	  Err dbg
@@ -1046,14 +1047,14 @@ module struct
         end
     else
     if isEvar sigma0 c then
-      if is_lift sigma0 c' && List.length l' = 3 then
+      if is_lift env sigma0 c' && List.length l' = 3 then
         run_and_unify dbg env sigma0 l' t
       else
         let e1 = destEvar sigma0 c in
         instantiate conv_t env (e1, l) t' sigma0 dbg
 
     else
-    if is_lift sigma0 c && List.length l = 3 then
+    if is_lift env sigma0 c && List.length l = 3 then
       run_and_unify dbg env sigma0 l t
     else
       let e2 = destEvar sigma0 c' in

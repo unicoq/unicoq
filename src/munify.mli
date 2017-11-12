@@ -26,4 +26,4 @@ val get_stats : unit -> stats
 val set_run : (Environ.env ->
                Evd.evar_map ->
                EConstr.constr -> (Evd.evar_map * EConstr.t) option) -> unit
-val set_lift_constr : EConstr.t Lazy.t -> unit
+val set_lift_constr : (Environ.env -> Evd.evar_map -> Evd.evar_map * EConstr.t) -> unit
