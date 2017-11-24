@@ -4,7 +4,7 @@
 
 An enhanced unification algorithm for Coq
 
-Copyright (c) 2015 Beta Ziliani <bziliani@famaf.unc.edu.ar>,
+Copyright (c) 2017 Beta Ziliani <bziliani@famaf.unc.edu.ar>,
 	           Matthieu Sozeau <mattam@mattam.org>
 
 Distributed under the terms of the MIT License,
@@ -27,7 +27,7 @@ The archive has 3 subdirectories:
 Installation
 ============
 
-The plugin works currently with Coq v8.5. Through OPAM,
+The plugin works currently with Coq v8.6. Through OPAM,
 this plugin is available in the [Coq's repository](http://coq.io/opam/):
 ```
  opam repo add coq-released https://coq.inria.fr/opam/released
