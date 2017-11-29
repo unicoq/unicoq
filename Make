@@ -3,6 +3,7 @@
 
 COQDOC = "$(COQBIN)coqdoc -interpolate -utf8"
 CAMLP4OPTIONS = "-loc loc"
+CAMLDEBUG = "-g"
 src/logger.mli
 src/logger.ml
 src/munify.mli

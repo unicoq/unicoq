@@ -884,14 +884,22 @@ module struct
       with Univ.UniverseInconsistency _ -> Err dbg
     else Err dbg
 
+
+(* let debug_env env sigma c = *)
+(*   if !dump then  *)
+(*     Feedback.msg_debug (Printer.pr_econstr_env env sigma c) *)
+(* let debug c = *)
+(*   if !dump then  *)
+(*     Feedback.msg_debug (Printer.pr_econstr c) *)
+        
   (** Given a head term c and with arguments l it whd reduces c if it is
       an evar, returning the new head and list of arguments.
   *)
-  let decompose_evar sigma (c, l) =
+  let rec decompose_evar sigma (c, l) =
     let (c', l') = decompose_app sigma c in
     if isCast sigma c' then
       let (t, _, _) = destCast sigma c' in
-      (t, l' @ l)
+      decompose_evar sigma (t, l' @ l)
     else
       (c', l' @ l)
 
@@ -1122,7 +1130,8 @@ module struct
       report (
         log_eq env "Prod-Same" conv_t c c' (dbg, sigma0) &&=
         unify_constr env t1 t2 &&=
-        unify_constr ~conv_t (EConstr.push_rel (crd_of_tuple (name,None,t1)) env) c1 c2)
+        let env = EConstr.push_rel (crd_of_tuple (name,None,t1)) env in
+        unify_constr ~conv_t env c1 c2)
 
     | LetIn (name, trm1, ty1, body1), LetIn (_, trm2, ty2, body2) ->
       (* Let-Same *)
@@ -1165,7 +1174,8 @@ module struct
         ise_array2 (unify_constr env) tys1 tys2 &&=
         ise_array2 (unify_constr (push_rec_types_econstr sigma0 recdef1 env)) bds1 bds2)
 
-    | _, _ -> Err dbg
+    | _, _ ->
+      Err dbg
 
   and push_rec_types_econstr sigma (a, l, m) env =
     Environ.push_rec_types (a, Array.map (to_constr sigma) l, Array.map (to_constr sigma) m) env
@@ -1187,7 +1197,7 @@ module struct
         log_eq_spine env "Let-ZetaR" conv_t t t' (dbg, sigma0) &&=
         unify' ~conv_t env t t2)
 
-    | _, Case _ | _, Fix _ when reduce_right && stuck != StuckedRight ->
+    | (_, Case _ | _, Fix _) when reduce_right && stuck != StuckedRight ->
       let t2 = evar_apprec P.ts env sigma0 t' in
       if not (eq_app_stack sigma0 t' t2) then
         begin report (
@@ -1213,7 +1223,7 @@ module struct
         log_eq_spine env "Let-ZetaL" conv_t t t' (dbg, sigma0) &&=
         unify' ~conv_t env t1 t')
 
-    | Case _, _ | Fix _, _ when reduce_left && stuck != StuckedLeft ->
+    | (Case _, _ | Fix _, _) when reduce_left && stuck != StuckedLeft ->
       let t2 = evar_apprec P.ts env sigma0 t in
       if not (eq_app_stack sigma0 t t2) then
 	begin report (
@@ -1225,30 +1235,26 @@ module struct
       else Err dbg
 
     (* Constants get unfolded after everything else *)
-    | _, Const _
-    | _, Rel _
-    | _, Var _ when reduce_right && has_definition sigma0 P.ts env c' && stuck == NotStucked ->
+    | (_, Const _ | _, Rel _ | _, Var _)
+      when reduce_right && has_definition sigma0 P.ts env c' && stuck == NotStucked ->
       if is_stuck env sigma0 t' then
         try_step ~stuck:StuckedRight conv_t env t t' sigma0 dbg
       else report (
           log_eq_spine env "Cons-DeltaNotStuckR" conv_t t t' (dbg, sigma0) &&=
           unify' ~conv_t env t (evar_apprec P.ts env sigma0 (get_def_app_stack sigma0 env t')))
-    | Const _, _
-    | Rel _, _
-    | Var _, _  when reduce_left && has_definition sigma0 P.ts env c && stuck == StuckedRight ->
+    | (Const _, _ | Rel _, _ | Var _, _)
+      when reduce_left && has_definition sigma0 P.ts env c && stuck == StuckedRight ->
       report (
         log_eq_spine env "Cons-DeltaStuckL" conv_t t t'  (dbg, sigma0) &&=
         unify' ~conv_t env (evar_apprec P.ts env sigma0 (get_def_app_stack sigma0 env t)) t')
 
-    | _, Const _
-    | _, Rel _
-    | _, Var _ when reduce_right && has_definition sigma0 P.ts env c' ->
+    | (_, Const _ | _, Rel _ | _, Var _)
+      when reduce_right && has_definition sigma0 P.ts env c' ->
       report (
         log_eq_spine env "Cons-DeltaR" conv_t t t' (dbg, sigma0) &&=
         unify' ~conv_t env t (evar_apprec P.ts env sigma0 (get_def_app_stack sigma0 env t')))
-    | Const _, _
-    | Rel _, _
-    | Var _, _  when reduce_left && has_definition sigma0 P.ts env c ->
+    | (Const _, _ | Rel _, _ | Var _, _)
+      when reduce_left && has_definition sigma0 P.ts env c ->
       report (
         log_eq_spine env "Cons-DeltaL" conv_t t t' (dbg, sigma0) &&=
         unify' ~conv_t env (evar_apprec P.ts env sigma0 (get_def_app_stack sigma0 env t)) t')
@@ -1322,7 +1328,7 @@ module struct
 
   and meta_reduce dir conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
     (* Meta-Reduce: before giving up we see if we can reduce on the right *)
-    if must_inst dir ev then
+    if must_inst dir ev && ((dir == Original && reduce_right) || (dir == Swap && reduce_left)) then
       if has_definition sigma P.ts env h then
         begin
           let t' = evar_apprec P.ts env sigma (get_def_app_stack sigma env t) in
