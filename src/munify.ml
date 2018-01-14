@@ -773,6 +773,16 @@ module Inst = functor (U : Unifier) -> struct
     let (xs, ys) = remove rargs rargs' in
     (List.rev xs, List.rev ys)
 
+  let all_vars_in tm vars =
+    Names.Idset.for_all (fun v -> Array.mem (Term.mkVar v) vars) (Termops.collect_vars tm)
+
+  let is_id subs nc =
+    let open Context.Named.Declaration in
+    let open Term in
+    snd (List.fold_left (fun (i, b) v ->
+        (i+1, b && isVar subs.(i) && (destVar subs.(i) = get_id v))
+      ) (0, true) nc)
+
   (* pre: args and args' are lists of vars and/or rels. subs is an array of rels and vars. *)
   let instantiate' dir conv_t env (ev, subs as uv) args (h, args') (dbg, sigma0) =
     let args, args' = remove_equal_tail (mkEvar uv, args) (h, args') in
@@ -780,66 +790,71 @@ module Inst = functor (U : Unifier) -> struct
     let t = RO.whd_beta sigma0 (applist (h, args')) in
     let evi = Evd.find_undefined sigma0 ev in
     let nc = Evd.evar_filtered_context evi in
-    let res =
-      let subsl = Array.to_list subs in
-      invert Evar.Map.empty sigma0 nc t subsl args ev >>= fun (map, t') ->
-      fill_lambdas_invert_types map env sigma0 nc t' subsl args ev >>= fun (map, t') ->
-      let sigma1 = prune_all map sigma0 in
-      let t' = Evarutil.nf_evar sigma1 t' in
-      let sigma1, t' =
-	Evarsolve.refresh_universes
+    if List.length args = 0 && is_id subs nc && all_vars_in t subs then
+      begin
+        Success (dbg, Evd.define ev t sigma0)
+      end
+    else
+      let res =
+        let subsl = Array.to_list subs in
+        invert Evar.Map.empty sigma0 nc t subsl args ev >>= fun (map, t') ->
+        fill_lambdas_invert_types map env sigma0 nc t' subsl args ev >>= fun (map, t') ->
+        let sigma1 = prune_all map sigma0 in
+        let t' = Evarutil.nf_evar sigma1 t' in
+        let sigma1, t' =
+	  Evarsolve.refresh_universes
 	    (if conv_t == R.CUMUL && isArity t' then
 	      (* ?X <= Type(i) -> X := Type j, j <= i *)
 	      (* Type(i) <= X -> X := Type j, i <= j *)
 	      Some (dir == Original)
-	   else None)
-	    (Environ.push_named_context nc env) sigma1 t' in
-      let t'' = instantiate_evar nc t' subsl in
-      let ty = Evd.existential_type sigma1 uv in
-      let unifty =
-	try
-	  match kind_of_term t'' with
-	  | Evar (evk2, _) ->
-            (* ?X : Π Δ. Type i = ?Y : Π Δ'. Type j.
+	     else None)
+	      (Environ.push_named_context nc env) sigma1 t' in
+        let t'' = instantiate_evar nc t' subsl in
+        let ty = Evd.existential_type sigma1 uv in
+        let unifty =
+	  try
+            match kind_of_term t'' with
+	    | Evar (evk2, _) ->
+              (* ?X : Π Δ. Type i = ?Y : Π Δ'. Type j.
 	       The body of ?X and ?Y just has to be of type Π Δ. Type k for some k <= i, j. *)
-	    let evienv = Evd.evar_env evi in
-	    let ctx1, i = R.dest_arity evienv evi.Evd.evar_concl in
-	    let evi2 = Evd.find sigma1 evk2 in
-	    let evi2env = Evd.evar_env evi2 in
-	    let ctx2, j = R.dest_arity evi2env evi2.Evd.evar_concl in
-	    let ui, uj = univ_of_sort i, univ_of_sort j in
-	    if i == j || Evd.check_eq sigma1 ui uj then (* Shortcut, i = j *)
-	      Success (dbg, sigma1)
-	    else if Evd.check_leq sigma1 ui uj then
-              let t2 = it_mkProd_or_LetIn (mkSort i) ctx2 in
-	      Success (dbg, Evd.downcast evk2 t2 sigma1)
-            else if Evd.check_leq sigma1 uj ui then
-	      let t1 = it_mkProd_or_LetIn (mkSort j) ctx1 in
-              Success (dbg, Evd.downcast ev t1 sigma1)
-	    else
-              let sigma1, k = Evd.new_sort_variable Evd.univ_flexible_alg sigma1 in
-	      let t1 = it_mkProd_or_LetIn (mkSort k) ctx1 in
-	      let t2 = it_mkProd_or_LetIn (mkSort k) ctx2 in
-	      let sigma1 = Evd.set_leq_sort env (Evd.set_leq_sort env sigma1 k i) k j in
-	      Success (dbg, Evd.downcast evk2 t2 (Evd.downcast ev t1 sigma1))
-	  | _ -> raise R.NotArity
-	  with R.NotArity ->
-	    let ty' = Retyping.get_type_of env sigma1 t'' in
-            U.unify_constr ~conv_t:R.CUMUL env ty' ty (dbg, sigma1)
-	in
-	let p = unifty &&= fun (dbg, sigma2) ->
+              let evienv = Evd.evar_env evi in
+	      let ctx1, i = R.dest_arity evienv evi.Evd.evar_concl in
+	      let evi2 = Evd.find sigma1 evk2 in
+	      let evi2env = Evd.evar_env evi2 in
+	      let ctx2, j = R.dest_arity evi2env evi2.Evd.evar_concl in
+	      let ui, uj = univ_of_sort i, univ_of_sort j in
+	      if i == j || Evd.check_eq sigma1 ui uj then (* Shortcut, i = j *)
+	        Success (dbg, sigma1)
+              else if Evd.check_leq sigma1 ui uj then
+                let t2 = it_mkProd_or_LetIn (mkSort i) ctx2 in
+	        Success (dbg, Evd.downcast evk2 t2 sigma1)
+              else if Evd.check_leq sigma1 uj ui then
+	        let t1 = it_mkProd_or_LetIn (mkSort j) ctx1 in
+                Success (dbg, Evd.downcast ev t1 sigma1)
+	      else
+                let sigma1, k = Evd.new_sort_variable Evd.univ_flexible_alg sigma1 in
+	        let t1 = it_mkProd_or_LetIn (mkSort k) ctx1 in
+	        let t2 = it_mkProd_or_LetIn (mkSort k) ctx2 in
+	        let sigma1 = Evd.set_leq_sort env (Evd.set_leq_sort env sigma1 k i) k j in
+	        Success (dbg, Evd.downcast evk2 t2 (Evd.downcast ev t1 sigma1))
+	    | _ -> raise R.NotArity
+	    with R.NotArity ->
+	      let ty' = Retyping.get_type_of env sigma1 t'' in
+              U.unify_constr ~conv_t:R.CUMUL env ty' ty (dbg, sigma1)
+	  in
+	  let p = unifty &&= fun (dbg, sigma2) ->
 	  let t' = RO.nf_evar sigma2 t' in
-	    if Termops.occur_meta t' (* || Termops.occur_evar ev t' *) then
+          if Termops.occur_meta t' (* || Termops.occur_evar ev t' *) then
 	      Err dbg
-	    else
+	  else
 	      (dstats.instantiations <- succ_big_int dstats.instantiations;
 	       Success (dbg, Evd.define ev t' sigma2))
-	in
-	  Some p
-    in
-    match res with
-    | Some r -> r
-    | None -> Err dbg
+	  in
+	    Some p
+      in
+      match res with
+      | Some r -> r
+      | None -> Err dbg
 end
 
 (** The main module *)
