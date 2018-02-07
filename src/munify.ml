@@ -835,6 +835,57 @@ module Inst = functor (U : Unifier) -> struct
     | None -> Err dbg
 end
 
+let explain_univ_and_fail dbg e =
+  debug_str (Printf.sprintf "Rigid-Same exception: %s"
+  (Pp.string_of_ppcmds (Univ.explain_universe_inconsistency Univ.Level.pr e))) 0;
+  report (Err dbg)
+
+(** Stolen from evarconv *)
+let check_leq_inductives evd cumi u u' =
+  let u = EConstr.EInstance.kind evd u in
+  let u' = EConstr.EInstance.kind evd u' in
+  let length_ind_instance = 
+    Univ.Instance.length
+      (Univ.AUContext.instance (Univ.ACumulativityInfo.univ_context cumi))
+  in
+  let ind_sbcst =  Univ.ACumulativityInfo.subtyp_context cumi in
+  if not ((length_ind_instance = Univ.Instance.length u) &&
+          (length_ind_instance = Univ.Instance.length u')) then
+     anomaly (Pp.str "Invalid inductive subtyping encountered!")
+  else
+    begin
+     let comp_subst = (Univ.Instance.append u u') in
+     let comp_cst =
+       Univ.UContext.constraints (Univ.subst_instance_context comp_subst ind_sbcst)
+     in
+     Evd.add_constraints evd comp_cst
+    end
+
+let check_strict dbg evd term term' cont =
+  let univs = EConstr.eq_constr_universes evd term term' in
+  match univs with
+  | Some univs ->
+    begin
+      let cstrs = Universes.to_constraints (Evd.universes evd) univs in
+      try Success (dbg, Evd.add_constraints evd cstrs)
+      with Univ.UniverseInconsistency p -> cont p
+    end
+  | None ->
+    report (Err dbg)
+
+(* p is the explanation of universe inconsistency from check_strict. we
+   want to be able to explain to the user what happend *)
+let check_subtyping_constraints dbg evd env (ind, u) (_, u') p =
+  begin
+    let mind = Environ.lookup_mind (fst ind) env in
+    match mind.Declarations.mind_universes with
+    | Declarations.Monomorphic_ind _ | Declarations.Polymorphic_ind _ ->
+      explain_univ_and_fail dbg p
+    | Declarations.Cumulative_ind cumi ->
+      let evd' = check_leq_inductives evd cumi u u' in
+      Success (dbg, check_leq_inductives evd' cumi u' u)
+  end
+
 (** The main module *)
 let rec unif (module P : Params) : (module Unifier) = (
 module struct
@@ -1091,15 +1142,6 @@ module struct
 
   and compare_heads conv_t env c c' (dbg, sigma0) =
     let rigid_same sigma = report (log_eq env "Rigid-Same" conv_t c c' (dbg, sigma)) in
-    let rigid_same_univs sigma0 flex u1 u2 =
-      let u1, u2 = EInstance.kind sigma0 u1, EInstance.kind sigma0 u2 in
-      try let sigma1 = Evd.set_eq_instances ~flex sigma0 u1 u2 in
-          rigid_same sigma1
-      with Univ.UniverseInconsistency e ->
-	debug_str (Printf.sprintf "Rigid-Same exception: %s"
-          (Pp.string_of_ppcmds (Univ.explain_universe_inconsistency Univ.Level.pr e))) 0;
-        report (Err dbg)
-    in
     match (kind sigma0 c, kind sigma0 c') with
     (* Type-Same *)
     | Sort s1, Sort s2 ->
@@ -1147,11 +1189,11 @@ module struct
     | Var id1, Var id2 when Id.equal id1 id2 ->
       rigid_same sigma0
     | Const (c1,u1), Const (c2,u2) when Names.eq_constant c1 c2 ->
-      rigid_same_univs sigma0 (Environ.evaluable_constant c1 env) u1 u2
+      check_strict dbg sigma0 c c' (fun p->explain_univ_and_fail dbg p)
     | Ind (c1,u1), Ind (c2,u2) when Names.eq_ind c1 c2 ->
-      rigid_same_univs sigma0 false u1 u2
+      check_strict dbg sigma0 c c' (check_subtyping_constraints dbg sigma0 env (c1, u1) (c2, u2))
     | Construct (c1,u1), Construct (c2,u2) when Names.eq_constructor c1 c2 ->
-      rigid_same_univs sigma0 false u1 u2
+      check_strict dbg sigma0 c c' (check_subtyping_constraints dbg sigma0 env (fst c1, u1) (fst c2, u2))
 
     | CoFix (i1,(_,tys1,bds1 as recdef1)), CoFix (i2,(_,tys2,bds2))
       when i1 = i2 ->
