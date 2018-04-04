@@ -12,7 +12,11 @@ open CErrors
 open Recordops
 open Big_int
 
-[@@@ocaml.warning "-9-27-40-41-42-48"]
+(* Warning 40 warns about OCaml picking a type for an unknown constructor.  In
+   our case, we want OCaml to pick the constructors from Constr.kind_of_term
+   without having to write e.g. Constr.App and without importing all of
+   Constr. *)
+[@@@ocaml.warning "-40"]
 
 module RO = Reductionops
 module R = Reduction
