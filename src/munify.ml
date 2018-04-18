@@ -42,7 +42,7 @@ let set_debug b =
     begin
       (* Evar instances might depend on Anonymous rels *)
       Detyping.set_detype_anonymous
-        (fun ?loc n -> CAst.make ?loc @@ Glob_term.GVar (Id.of_string ("_ANONYMOUS_REL_" ^ string_of_int n)))
+        (fun ?loc n -> Id.of_string ("_ANONYMOUS_REL_" ^ string_of_int n))
     end
 
 let get_debug () = !debug
@@ -521,12 +521,12 @@ let invert map sigma ctx (t : EConstr.t) subs args ev' =
 
 (** True if at least one (named) var in tm is in vars. *)
 let free_vars_intersect sigma tm vars =
-  Names.Idset.exists (fun v -> List.mem v vars) (Termops.collect_vars sigma (of_constr tm))
+  Names.Id.Set.exists (fun v -> List.mem v vars) (Termops.collect_vars sigma (of_constr tm))
 
 let some_or_prop o =
   match o with
-      None -> Term.mkProp
-    | Some tm -> tm
+  | None -> Constr.mkProp
+  | Some tm -> tm
 
 (** Removes the positions in the list, and all dependent elements. *)
 let remove sigma (l : Context.Named.t) pos =
@@ -656,7 +656,7 @@ let check_conv_record sigma (t1,l1) (t2,l2) =
 	      else lookup_canonical_conversion (proji, Prod_cs),[a;Termops.pop b]
 	  | Sort s ->
 	      lookup_canonical_conversion
-		(proji, Sort_cs (Term.family_of_sort (ESorts.kind sigma s))),[]
+		(proji, Sort_cs (Sorts.family (ESorts.kind sigma s))),[]
 	  | _ ->
 	      let c2,_ = Termops.global_of_constr sigma t2 in
 		Recordops.lookup_canonical_conversion (proji, Const_cs c2),l2
@@ -758,10 +758,10 @@ module Inst = functor (U : Unifier) -> struct
     let rargs = List.rev args in
     let rargs' = List.rev args' in
     let noccur sigma i xs ys =
-      not (Termops.occur_term sigma i h')
-      && not (Termops.occur_term sigma i h)
-      && not (List.exists (Termops.occur_term sigma i) ys)
-      && not (List.exists (Termops.occur_term sigma i) xs) in
+      not (Termops.dependent sigma i h')
+      && not (Termops.dependent sigma i h)
+      && not (List.exists (Termops.dependent sigma i) ys)
+      && not (List.exists (Termops.dependent sigma i) xs) in
     let rec remove rargs rargs' =
       match rargs, rargs' with
       | (x :: xs), (y :: ys) when eq_constr sigma x y && noccur sigma x xs ys -> remove xs ys
@@ -839,56 +839,14 @@ module Inst = functor (U : Unifier) -> struct
     | None -> Err dbg
 end
 
-let explain_univ_and_fail dbg e =
-  debug_str (Printf.sprintf "Rigid-Same exception: %s"
-  (Pp.string_of_ppcmds (Univ.explain_universe_inconsistency Univ.Level.pr e))) 0;
-  report (Err dbg)
-
-(** Stolen from evarconv *)
-let check_leq_inductives evd cumi u u' =
-  let u = EConstr.EInstance.kind evd u in
-  let u' = EConstr.EInstance.kind evd u' in
-  let length_ind_instance = 
-    Univ.Instance.length
-      (Univ.AUContext.instance (Univ.ACumulativityInfo.univ_context cumi))
-  in
-  let ind_sbcst =  Univ.ACumulativityInfo.subtyp_context cumi in
-  if not ((length_ind_instance = Univ.Instance.length u) &&
-          (length_ind_instance = Univ.Instance.length u')) then
-     anomaly (Pp.str "Invalid inductive subtyping encountered!")
-  else
-    begin
-     let comp_subst = (Univ.Instance.append u u') in
-     let comp_cst =
-       Univ.UContext.constraints (Univ.subst_instance_context comp_subst ind_sbcst)
-     in
-     Evd.add_constraints evd comp_cst
-    end
-
-let check_strict dbg evd term term' cont =
-  let univs = EConstr.eq_constr_universes evd term term' in
-  match univs with
-  | Some univs ->
-    begin
-      let cstrs = Universes.to_constraints (Evd.universes evd) univs in
-      try Success (dbg, Evd.add_constraints evd cstrs)
-      with Univ.UniverseInconsistency p -> cont p
-    end
-  | None ->
-    report (Err dbg)
-
-(* p is the explanation of universe inconsistency from check_strict. we
-   want to be able to explain to the user what happend *)
-let check_subtyping_constraints dbg evd env (ind, u) (_, u') p =
-  begin
-    let mind = Environ.lookup_mind (fst ind) env in
-    match mind.Declarations.mind_universes with
-    | Declarations.Monomorphic_ind _ | Declarations.Polymorphic_ind _ ->
-      explain_univ_and_fail dbg p
-    | Declarations.Cumulative_ind cumi ->
-      let evd' = check_leq_inductives evd cumi u u' in
-      Success (dbg, check_leq_inductives evd' cumi u' u)
-  end
+(** forward the use of evar conv *)
+let use_evar_conv env t1 t2 (dbg, sigma) : unif =
+  let open Evarconv in
+  try
+    let sigma = the_conv_x env t1 t2 sigma in
+    Success (dbg, sigma)
+  with UnableToUnify _ ->
+    Err dbg
 
 (** The main module *)
 let rec unif (module P : Params) : (module Unifier) = (
@@ -1192,12 +1150,18 @@ module struct
       rigid_same sigma0
     | Var id1, Var id2 when Id.equal id1 id2 ->
       rigid_same sigma0
-    | Const (c1,u1), Const (c2,u2) when Names.eq_constant c1 c2 ->
-      check_strict dbg sigma0 c c' (fun p->explain_univ_and_fail dbg p)
-    | Ind (c1,u1), Ind (c2,u2) when Names.eq_ind c1 c2 ->
-      check_strict dbg sigma0 c c' (check_subtyping_constraints dbg sigma0 env (c1, u1) (c2, u2))
-    | Construct (c1,u1), Construct (c2,u2) when Names.eq_constructor c1 c2 ->
-      check_strict dbg sigma0 c c' (check_subtyping_constraints dbg sigma0 env (fst c1, u1) (fst c2, u2))
+    | Const (c1,_), Const (c2,_) when Constant.equal c1 c2 ->
+      report (
+        log_eq env "Rigid-Same" conv_t c c' (dbg, sigma0) &&=
+        use_evar_conv env c c')
+    | Ind (c1,_), Ind (c2,_) when Names.eq_ind c1 c2 ->
+      report (
+        log_eq env "Rigid-Same" conv_t c c' (dbg, sigma0) &&=
+        use_evar_conv env c c')
+    | Construct (c1,_), Construct (c2,_) when Names.eq_constructor c1 c2 ->
+      report (
+        log_eq env "Rigid-Same" conv_t c c' (dbg, sigma0) &&=
+        use_evar_conv env c c')
 
     | CoFix (i1,(_,tys1,bds1 as recdef1)), CoFix (i2,(_,tys2,bds2))
       when i1 = i2 ->
@@ -1442,7 +1406,7 @@ module struct
   (* unifies ty with a product type from {name : a} to some Type *)
   and check_product dbg env sigma ty (name, a) =
     let nc = EConstr.named_context env in
-    let naid = Namegen.next_name_away name (Termops.ids_of_named_context nc) in
+    let naid = Namegen.next_name_away name (Termops.vars_of_env env) in
     let nc' = CND.of_tuple (naid, None, a) :: nc in
     let sigma', univ = Evd.new_univ_variable Evd.univ_flexible sigma in
     let evi = Evd.make_evar (EConstr.val_of_named_context nc') (Constr.mkType univ) in
