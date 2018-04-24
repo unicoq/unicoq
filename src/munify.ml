@@ -521,17 +521,17 @@ let invert map sigma ctx (t : EConstr.t) subs args ev' =
 
 (** True if at least one (named) var in tm is in vars. *)
 let free_vars_intersect sigma tm vars =
-  Names.Id.Set.exists (fun v -> List.mem v vars) (Termops.collect_vars sigma (of_constr tm))
+  Names.Id.Set.exists (fun v -> List.mem v vars) (Termops.collect_vars sigma tm)
 
 let some_or_prop o =
   match o with
-  | None -> Constr.mkProp
+  | None -> EConstr.mkProp
   | Some tm -> tm
 
 (** Removes the positions in the list, and all dependent elements. *)
-let remove sigma (l : Context.Named.t) pos =
+let remove sigma l pos =
   let l = List.rev l in
-  let rec remove' i (l : Context.Named.t) vs =
+  let rec remove' i (l: (Evd.econstr, Evd.etypes) CND.pt list) vs =
     match l with
       | [] -> []
       | (d :: s) ->
@@ -559,20 +559,20 @@ let rec prune evd (ev, plist) =
   let evi = Evd.find_undefined evd ev in
   let env = Evd.evar_filtered_context evi in
   let env' = remove evd env plist in
-  let env_val' = (List.fold_right Environ.push_named_context_val env'
+  let env_val' = (List.fold_right push_named_context_val env'
                     Environ.empty_named_context_val) in
   (* the type of the evar may contain an evar depending on the some of
      the vars that we want to prune, so we need to prune that
      as well *)
-  let concl = of_constr @@ Evd.evar_concl evi in
+  let concl = Evd.evar_concl evi in
   let id_env' = id_substitution env' in
   match invert Evar.Map.empty evd env' concl id_env' [] ev with
       None -> raise CannotPrune
     | Some (m, concl) ->
       let evd = prune_all m evd in
-      let concl = of_constr @@ Evd.evar_concl evi in
+      let concl = Evd.evar_concl evi in
       let evd', ev' = EU.new_evar_instance env_val' evd concl id_env' in
-      Evd.define ev (to_constr evd' ev') evd'
+      Evd.define ev ev' evd'
 
 and prune_all map evd =
   List.fold_left prune evd (Evar.Map.bindings map)
@@ -681,9 +681,7 @@ let evar_apprec ts env sigma (c, stack) =
       RO.(whd_betaiota_deltazeta_for_iota_state ts env sigma Cst_stack.empty s) in
     match kind sigma t with
     | Evar (evk,eva) when Evd.is_defined sigma evk ->
-      (* XXX: Econstr.API *)
-      let eva = Array.map (to_constr sigma) eva in
-      aux (of_constr @@ Evd.existential_value sigma (evk,eva), stack)
+      aux (Evd.existential_value sigma (evk,eva), stack)
     | _ ->
       match RO.Stack.list_of_app_stack stack with
       | None -> decompose_app sigma (RO.Stack.zip sigma (t, stack))
@@ -789,10 +787,9 @@ module Inst = functor (U : Unifier) -> struct
 	      (* Type(i) <= X -> X := Type j, i <= j *)
 	      Some (dir == Original)
 	   else None)
-	    (Environ.push_named_context nc env) sigma1 t' in
+	    (EConstr.push_named_context nc env) sigma1 t' in
       let t'' = instantiate_evar sigma1 nc t' subsl in
       (* XXX: EConstr.API *)
-      let subs = Array.map (to_constr sigma1) subs in
       let ty = Evd.existential_type sigma1 (ev,subs) in
       let unifty =
 	try
@@ -801,36 +798,36 @@ module Inst = functor (U : Unifier) -> struct
             (* ?X : Π Δ. Type i = ?Y : Π Δ'. Type j.
 	       The body of ?X and ?Y just has to be of type Π Δ. Type k for some k <= i, j. *)
 	    let evienv = Evd.evar_env evi in
-	    let ctx1, i = R.dest_arity evienv evi.Evd.evar_concl in
+	    let ctx1, i = R.dest_arity evienv (EConstr.to_constr sigma1 evi.Evd.evar_concl) in
 	    let evi2 = Evd.find sigma1 evk2 in
 	    let evi2env = Evd.evar_env evi2 in
-	    let ctx2, j = R.dest_arity evi2env evi2.Evd.evar_concl in
+	    let ctx2, j = R.dest_arity evi2env (EConstr.to_constr sigma1 evi2.Evd.evar_concl) in
 	    let ui, uj = Sorts.univ_of_sort i, Sorts.univ_of_sort j in
 	    if i == j || Evd.check_eq sigma1 ui uj then (* Shortcut, i = j *)
 	      Success (dbg, sigma1)
 	    else if Evd.check_leq sigma1 ui uj then
               let t2 = it_mkProd_or_LetIn (mkSort i) (List.map of_rel_decl ctx2) in
-	      Success (dbg, Evd.downcast evk2 (to_constr sigma1 t2) sigma1)
+	      Success (dbg, Evd.downcast evk2 t2 sigma1)
             else if Evd.check_leq sigma1 uj ui then
 	      let t1 = it_mkProd_or_LetIn (mkSort j) (List.map of_rel_decl ctx1) in
-              Success (dbg, Evd.downcast ev (to_constr sigma1 t1) sigma1)
+              Success (dbg, Evd.downcast ev t1 sigma1)
 	    else
               let sigma1, k = Evd.new_sort_variable Evd.univ_flexible_alg sigma1 in
 	      let t1 = it_mkProd_or_LetIn (mkSort k) (List.map of_rel_decl ctx1) in
 	      let t2 = it_mkProd_or_LetIn (mkSort k) (List.map of_rel_decl ctx2) in
 	      let sigma1 = Evd.set_leq_sort env (Evd.set_leq_sort env sigma1 k i) k j in
-	      Success (dbg, Evd.downcast evk2 (to_constr sigma1 t2) (Evd.downcast ev (to_constr sigma1 t1) sigma1))
+	      Success (dbg, Evd.downcast evk2 t2 (Evd.downcast ev t1 sigma1))
 	  | _ -> raise R.NotArity
 	  with R.NotArity ->
 	    let ty' = Retyping.get_type_of env sigma1 t'' in
-            U.unify_constr ~conv_t:R.CUMUL env ty' (of_constr ty) (dbg, sigma1)
+            U.unify_constr ~conv_t:R.CUMUL env ty' ty (dbg, sigma1)
 	in
 	let p = unifty &&= fun (dbg, sigma2) ->
 	    if Termops.occur_meta sigma2 t' (* || Termops.occur_evar ev t' *) then
 	      Err dbg
 	    else
 	      (dstats.instantiations <- succ_big_int dstats.instantiations;
-	       Success (dbg, Evd.define ev (to_constr sigma2 t') sigma2))
+	       Success (dbg, Evd.define ev t' sigma2))
 	in
 	  Some p
     in
@@ -1409,7 +1406,7 @@ module struct
     let naid = Namegen.next_name_away name (Termops.vars_of_env env) in
     let nc' = CND.of_tuple (naid, None, a) :: nc in
     let sigma', univ = Evd.new_univ_variable Evd.univ_flexible sigma in
-    let evi = Evd.make_evar (EConstr.val_of_named_context nc') (Constr.mkType univ) in
+    let evi = Evd.make_evar (EConstr.val_of_named_context nc') (EConstr.mkType univ) in
     let sigma'',v = Evarutil.new_pure_evar_full sigma' evi in
     let idsubst = Array.of_list (mkRel 1 :: id_substitution nc) in
     unify_constr ~conv_t:R.CUMUL env ty (mkProd (Names.Name naid, a, mkEvar(v, idsubst))) (dbg, sigma'')
