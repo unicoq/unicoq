@@ -887,10 +887,11 @@ module struct
     if P.wreduce == Both && ground_spine sigma0 sp1 && ground_spine sigma0 sp2 then
       let app1 = applist sp1 and app2 = applist sp2 in
       try
-        let (sigma1, b) = RO.infer_conv ~pb:conv_t ~ts:P.ts env sigma0 app1 app2 in
-        if b then
+        begin match RO.infer_conv ~pb:conv_t ~ts:P.ts env sigma0 app1 app2 with
+        | None -> Err dbg
+        | Some sigma1 ->
           report (log_eq_spine env "Reduce-Same" conv_t sp1 sp2 (dbg, sigma1))
-        else Err dbg
+        end
       with Univ.UniverseInconsistency _ -> Err dbg
     else Err dbg
 
