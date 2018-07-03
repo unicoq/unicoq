@@ -1,4 +1,0 @@
-install-extra::
-	install -d "$(OCAMLFIND_DESTDIR)"
-	ln -s $(COQLIBINSTALL)/Unicoq $(OCAMLFIND_DESTDIR)
-	install -m 0644 src/META src/unicoq.a "$(OCAMLFIND_DESTDIR)Unicoq"
