@@ -285,8 +285,10 @@ let log_eq env rule conv_t t1 t2 (l, sigma) =
     Success (l, sigma)
   else
     let ppcmd_of env (t : EConstr.t) =
-      try Termops.print_constr_env env sigma t
-      with _ -> Termops.print_constr t in
+      try Printer.pr_econstr_env env sigma t
+      (* This is really suspicious as it will hide a serious bug. *)
+      with _ -> Termops.Internal.debug_print_constr t
+    in
     let str1 = Pp.string_of_ppcmds (ppcmd_of env t1) in
     let str2 = Pp.string_of_ppcmds (ppcmd_of env t2) in
     let str1 = latexify str1 in
@@ -307,8 +309,8 @@ let debug_str s _l =
     ()
 
 let debug_eq env sigma t c1 c2 _l =
-  let s1 = string_of_ppcmds (Termops.print_constr_env env sigma (applist c1)) in
-  let s2 = string_of_ppcmds (Termops.print_constr_env env sigma (applist c2)) in
+  let s1 = string_of_ppcmds (Printer.pr_econstr_env env sigma (applist c1)) in
+  let s2 = string_of_ppcmds (Printer.pr_econstr_env env sigma (applist c2)) in
   Printf.printf "%s %s %s\n" (if t == R.CONV then "=?=" else "<?=") s1 s2
 
 let print_eq f (conv_t, c1, c2) =
