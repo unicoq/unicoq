@@ -7,7 +7,11 @@ type stats = {
   instantiations : Big_int.big_int
 }
 
-val unify_evar_conv : TransparentState.t -> Evarsolve.conv_fun
+type unify_fun =
+  Environ.env -> Evd.evar_map ->
+  Reduction.conv_pb -> EConstr.t -> EConstr.t -> Evarsolve.unification_result
+
+val unify_evar_conv : TransparentState.t -> unify_fun
 
 (** Given a set of evars s and terms t1 t2, it unifies the terms only
     allowing instantiations from the evars in t1 and s, and only
@@ -15,10 +19,11 @@ val unify_evar_conv : TransparentState.t -> Evarsolve.conv_fun
     "pattern" (for pattern matching), so only the variables in t1 are
     instantiated, as long as they occur in s, and only the scrutinee
     (t2) is reduced.  *)
-val unify_match : Evar.Set.t -> TransparentState.t -> Evarsolve.conv_fun
+
+val unify_match : Evar.Set.t -> TransparentState.t -> unify_fun
 
 (** Same as unify_match but with no reduction *)
-val unify_match_nored : Evar.Set.t -> TransparentState.t -> Evarsolve.conv_fun
+val unify_match_nored : Evar.Set.t -> TransparentState.t -> unify_fun
 
 val get_stats : unit -> stats
 
