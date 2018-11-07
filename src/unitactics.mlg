@@ -17,6 +17,8 @@
 
 DECLARE PLUGIN "unicoq"
 
+{
+
 open Ltac_plugin
 open Pp
 open Proofview
@@ -51,34 +53,36 @@ let munify_tac gl sigma ismatch x y =
   | Evarsolve.Success evm -> evars evm
   | Evarsolve.UnifFailure _ -> Tacticals.New.tclFAIL 0 (str"Unification failed")
 
+}
+
 (* This adds an entry to the grammar of tactics, similar to what
    Tactic Notation does. *)
 
 TACTIC EXTEND munify_tac
 | ["munify" uconstr(c) uconstr(c') ] ->
-  [ Proofview.Goal.enter begin fun gl ->
+  { Proofview.Goal.enter begin fun gl ->
         let sigma = Goal.sigma gl in
         munify_tac gl sigma false c c'
       end
-  ]
+  }
 END
 
 
 TACTIC EXTEND mmatch_tac
 | ["mmatch" uconstr(c) uconstr(c') ] ->
-  [ Proofview.Goal.enter begin fun gl ->
+  { Proofview.Goal.enter begin fun gl ->
         let _env = Proofview.Goal.env gl in
         let sigma = Proofview.Goal.sigma gl in
         munify_tac gl sigma true c c'
       end
-  ]
+  }
 END
 
 VERNAC COMMAND EXTEND PrintMunifyStats CLASSIFIED AS SIDEFF
-  | [ "Print" "Unicoq" "Stats" ] -> [
+  | [ "Print" "Unicoq" "Stats" ] -> {
       let s = Munify.get_stats () in
       Printf.printf "STATS:\t%s\t\t%s\n"
         (Big_int.string_of_big_int s.unif_problems)
         (Big_int.string_of_big_int s.instantiations)
-  ]
+  }
 END
