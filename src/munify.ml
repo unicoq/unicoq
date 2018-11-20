@@ -382,7 +382,7 @@ let find_unique_rel sigma = find_unique (isRel sigma) (destRel sigma)
 let has_definition sigma ts env t =
   if isVar sigma t then
     let var = destVar sigma t in
-    if not (CClosure.is_transparent_variable ts var) then
+    if not (TransparentState.is_transparent_variable ts var) then
       false
     else
       let v = CND.get_value (Environ.lookup_named var env) in
@@ -397,7 +397,7 @@ let has_definition sigma ts env t =
       | _ -> false
   else if isConst sigma t then
     let c,_ = destConst sigma t in
-      CClosure.is_transparent_constant ts c &&
+      TransparentState.is_transparent_constant ts c &&
       Environ.evaluable_constant c env
   else
     false
@@ -727,7 +727,7 @@ type stucked = NotStucked | StuckedLeft | StuckedRight
 
 (** Input parameters for the algorithm *)
 module type Params = sig
-  val ts : Names.transparent_state
+  val ts : TransparentState.t
   val wreduce : which_side (* on which side it must perform reduction *)
   val winst : which_side (* on which side evars are allowed to be instantiated *)
   val match_evars : Evar.Set.t option (* which evars may be instantiated *)
