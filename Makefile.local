@@ -1,6 +1,0 @@
-install-extra::
-	install -d "$(shell ocamlfind printconf destdir)"
-	ln -s $(COQLIBINSTALL)/Unicoq $(shell ocamlfind printconf destdir)/
-	install -m 0644 src/META src/unicoq.a "$(shell ocamlfind printconf destdir)/Unicoq"
-
-CAMLPKGS += -package num

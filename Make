@@ -9,7 +9,7 @@ src/logger.ml
 src/munify.mli
 src/munify.ml
 src/unitactics.mlg
-src/unicoq.mlpack
+src/unicoq.mllib
 theories/Unicoq.v
 test-suite/munifytest.v
 test-suite/microtests.v
