@@ -1,0 +1,10 @@
+(library
+ (name unicoq)
+ (public_name unicoq.plugin)
+ (flags :standard -warn-error -9-27-50)
+ (libraries coq.plugins.ltac))
+
+(rule
+ (targets unitactics.ml)
+ (deps (:pp-file unitactics.mlg))
+ (action (run coqpp %{pp-file})))

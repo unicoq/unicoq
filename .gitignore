@@ -44,3 +44,8 @@ doc/*.css
 # emacs save files
 *~
 \#*\#
+
+# Dune
+_build
+.merlin
+*.install
