@@ -137,9 +137,9 @@ let _ = Goptions.declare_bool_option {
 }
 
 
-(** {2 Stats} *)
-(** We log all the calls to unification and the evar
-    instantiations. *)
+(** {2 Stats}
+
+    We log all the calls to unification and the evar instantiations. *)
 type my_stats = {
   mutable unif_problems : big_int;
   mutable instantiations : big_int
@@ -323,8 +323,8 @@ let print_eq f (conv_t, c1, c2) =
   output_string f "}"
 
 
-(** {2 Run function for executing arbitrary code given a certain constr} *)
-(** This is used in Beta's thesis, although it isn't fully studied.
+(** {2 Run function for executing arbitrary code given a certain constr}
+    This is used in Beta's thesis, although it isn't fully studied.
     We leave it for now, but it might get GC at some point. *)
 let run_function = ref (fun _ _ _ -> None)
 let set_run f = run_function := f
@@ -1285,7 +1285,7 @@ module struct
   and is_stuck env sigma (hd, args) =
     let (hd, args) = evar_apprec P.ts env sigma (try_unfolding sigma P.ts env hd, args) in
     let rec is_unnamed (hd, args) = match kind sigma hd with
-      | (Var _|Construct _|Ind _|Const _|Prod _|Sort _) -> false
+      | (Var _|Construct _|Ind _|Const _|Prod _|Sort _|Int _) -> false
       | (Case _|Fix _|CoFix _|Meta _|Rel _)-> true
       | Evar _ -> false (* immediate solution without Canon Struct *)
       | Lambda _ -> assert(args = []); true
