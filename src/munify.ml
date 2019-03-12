@@ -727,15 +727,19 @@ type stucked = NotStucked | StuckedLeft | StuckedRight
 
 (** Input parameters for the algorithm *)
 module type Params = sig
-  val ts : TransparentState.t
+  val flags : Evarsolve.unify_flags
   val wreduce : which_side (* on which side it must perform reduction *)
   val winst : which_side (* on which side evars are allowed to be instantiated *)
   val match_evars : Evar.Set.t option (* which evars may be instantiated *)
 end
 
+type unify_fun =
+  Environ.env -> Evd.evar_map ->
+  Reduction.conv_pb -> EConstr.t -> EConstr.t -> Evarsolve.unification_result
+
 (** The main module type of unification, containing the functions that can be exported *)
 module type Unifier = sig
-  val unify_evar_conv : Evarsolve.conv_fun
+  val unify_evar_conv : unify_fun
 
   val unify_constr : ?conv_t:R.conv_pb ->
     Environ.env ->
@@ -842,7 +846,7 @@ end
 let use_evar_conv env t1 t2 (dbg, sigma) : unif =
   let open Evarconv in
   try
-    let sigma = the_conv_x env t1 t2 sigma in
+    let sigma = Evarconv.unify_delay env sigma t1 t2 in
     Success (dbg, sigma)
   with UnableToUnify _ ->
     Err dbg
@@ -889,7 +893,7 @@ module struct
     if P.wreduce == Both && ground_spine sigma0 sp1 && ground_spine sigma0 sp2 then
       let app1 = applist sp1 and app2 = applist sp2 in
       try
-        begin match RO.infer_conv ~pb:conv_t ~ts:P.ts env sigma0 app1 app2 with
+        begin match RO.infer_conv ~pb:conv_t ~ts:P.flags.closed_ts env sigma0 app1 app2 with
         | None -> Err dbg
         | Some sigma1 ->
           report (log_eq_spine env "Reduce-Same" conv_t sp1 sp2 (dbg, sigma1))
@@ -1090,7 +1094,7 @@ module struct
 	    R.CONV -> None
           | R.CUMUL -> Some (dir == Original)
         in
-	match Evarsolve.solve_simple_eqn unify_evar_conv env sigma (pbty, evsubs, t) with
+        match Evarsolve.solve_simple_eqn (fun _flags _k -> unify_evar_conv) P.flags env sigma (pbty, evsubs, t) with
           Evarsolve.Success sigma' ->
           Printf.printf "%s" "solve_simple_eqn solved it: ";
 	  debug_eq env sigma R.CONV (mkEvar evsubs, []) (decompose_app sigma t) 0;
@@ -1208,7 +1212,7 @@ module struct
         unify' ~conv_t env t t2)
 
     | (_, Case _ | _, Fix _) when reduce_right && stuck != StuckedRight ->
-      let t2 = evar_apprec P.ts env sigma0 t' in
+      let t2 = evar_apprec P.flags.open_ts env sigma0 t' in
       if not (eq_app_stack sigma0 t' t2) then
         begin report (
             log_eq_spine env "Case-IotaR" conv_t t t' (dbg, sigma0) &&=
@@ -1234,7 +1238,7 @@ module struct
         unify' ~conv_t env t1 t')
 
     | (Case _, _ | Fix _, _) when reduce_left && stuck != StuckedLeft ->
-      let t2 = evar_apprec P.ts env sigma0 t in
+      let t2 = evar_apprec P.flags.open_ts env sigma0 t in
       if not (eq_app_stack sigma0 t t2) then
 	begin report (
           log_eq_spine env "Case-IotaL" conv_t t t' (dbg, sigma0) &&=
@@ -1246,28 +1250,28 @@ module struct
 
     (* Constants get unfolded after everything else *)
     | (_, Const _ | _, Rel _ | _, Var _)
-      when reduce_right && has_definition sigma0 P.ts env c' && stuck == NotStucked ->
+      when reduce_right && has_definition sigma0 P.flags.open_ts env c' && stuck == NotStucked ->
       if is_stuck env sigma0 t' then
         try_step ~stuck:StuckedRight conv_t env t t' sigma0 dbg
       else report (
           log_eq_spine env "Cons-DeltaNotStuckR" conv_t t t' (dbg, sigma0) &&=
-          unify' ~conv_t env t (evar_apprec P.ts env sigma0 (get_def_app_stack sigma0 env t')))
+          unify' ~conv_t env t (evar_apprec P.flags.open_ts env sigma0 (get_def_app_stack sigma0 env t')))
     | (Const _, _ | Rel _, _ | Var _, _)
-      when reduce_left && has_definition sigma0 P.ts env c && stuck == StuckedRight ->
+      when reduce_left && has_definition sigma0 P.flags.open_ts env c && stuck == StuckedRight ->
       report (
         log_eq_spine env "Cons-DeltaStuckL" conv_t t t'  (dbg, sigma0) &&=
-        unify' ~conv_t env (evar_apprec P.ts env sigma0 (get_def_app_stack sigma0 env t)) t')
+        unify' ~conv_t env (evar_apprec P.flags.open_ts env sigma0 (get_def_app_stack sigma0 env t)) t')
 
     | (_, Const _ | _, Rel _ | _, Var _)
-      when reduce_right && has_definition sigma0 P.ts env c' ->
+      when reduce_right && has_definition sigma0 P.flags.open_ts env c' ->
       report (
         log_eq_spine env "Cons-DeltaR" conv_t t t' (dbg, sigma0) &&=
-        unify' ~conv_t env t (evar_apprec P.ts env sigma0 (get_def_app_stack sigma0 env t')))
+        unify' ~conv_t env t (evar_apprec P.flags.open_ts env sigma0 (get_def_app_stack sigma0 env t')))
     | (Const _, _ | Rel _, _ | Var _, _)
-      when reduce_left && has_definition sigma0 P.ts env c ->
+      when reduce_left && has_definition sigma0 P.flags.open_ts env c ->
       report (
         log_eq_spine env "Cons-DeltaL" conv_t t t' (dbg, sigma0) &&=
-        unify' ~conv_t env (evar_apprec P.ts env sigma0 (get_def_app_stack sigma0 env t)) t')
+        unify' ~conv_t env (evar_apprec P.flags.open_ts env sigma0 (get_def_app_stack sigma0 env t)) t')
 
     (* Lam-EtaR *)
     | _, Lambda (name, t1, c1) when reduce_right && CList.is_empty l' && not (isLambda sigma0 c) ->
@@ -1283,13 +1287,13 @@ module struct
     | _, _ -> Err dbg
 
   and is_stuck env sigma (hd, args) =
-    let (hd, args) = evar_apprec P.ts env sigma (try_unfolding sigma P.ts env hd, args) in
+    let (hd, args) = evar_apprec P.flags.open_ts env sigma (try_unfolding sigma P.flags.open_ts env hd, args) in
     let rec is_unnamed (hd, args) = match kind sigma hd with
       | (Var _|Construct _|Ind _|Const _|Prod _|Sort _|Int _) -> false
       | (Case _|Fix _|CoFix _|Meta _|Rel _)-> true
       | Evar _ -> false (* immediate solution without Canon Struct *)
       | Lambda _ -> assert(args = []); true
-      | LetIn (_, b, _, c) -> is_unnamed (evar_apprec P.ts env sigma (subst1 b c, args))
+      | LetIn (_, b, _, c) -> is_unnamed (evar_apprec P.flags.open_ts env sigma (subst1 b c, args))
       | Proj (p, c) -> false
       | App _| Cast _ -> assert false
     in is_unnamed (hd, args)
@@ -1299,7 +1303,7 @@ module struct
       begin
         try
           let module P' = (struct
-            let ts = P.ts
+            let flags = P.flags
             let wreduce = Both
             let winst = Both
             let match_evars = P.match_evars
@@ -1339,16 +1343,16 @@ module struct
   and meta_reduce dir conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
     (* Meta-Reduce: before giving up we see if we can reduce on the right *)
     if must_inst dir ev && ((dir == Original && reduce_right) || (dir == Swap && reduce_left)) then
-      if has_definition sigma P.ts env h then
+      if has_definition sigma P.flags.open_ts env h then
         begin
-          let t' = evar_apprec P.ts env sigma (get_def_app_stack sigma env t) in
+          let t' = evar_apprec P.flags.open_ts env sigma (get_def_app_stack sigma env t) in
           report (
             log_eq_spine env "Meta-Reduce" conv_t (mkEvar evsubs, args) t (dbg, sigma) &&=
             switch dir (unify' ~conv_t env) (mkEvar evsubs, args) t')
         end
       else
         begin
-          let t' = evar_apprec P.ts env sigma t in
+          let t' = evar_apprec P.flags.open_ts env sigma t in
           if not (eq_app_stack sigma t t') then
             begin
               report (
@@ -1422,9 +1426,19 @@ module struct
     unify_constr ~conv_t env' t1 t'
 end)
 
+let unify_new flags =
+  let module P = (struct
+    let flags = flags
+    let wreduce = Both
+    let winst = Both
+    let match_evars = None
+  end : Params) in
+  let module M = (val unif (module P)) in
+  M.unify_evar_conv
+
 let unify_evar_conv ts =
   let module P = (struct
-    let ts = ts
+    let flags = Evarconv.default_flags_of ts
     let wreduce = Both
     let winst = Both
     let match_evars = None
@@ -1434,7 +1448,7 @@ let unify_evar_conv ts =
 
 let unify_match evars ts =
   let module P = (struct
-    let ts = ts
+    let flags = Evarconv.default_flags_of ts
     let wreduce = Right
     let winst = Left
     let match_evars = Some evars
@@ -1444,7 +1458,7 @@ let unify_match evars ts =
 
 let unify_match_nored evars ts =
   let module P = (struct
-    let ts = ts
+    let flags = Evarconv.default_flags_of ts
     let wreduce = NoAction
     let winst = Left
     let match_evars = Some evars
@@ -1454,7 +1468,7 @@ let unify_match_nored evars ts =
 
 let use_munify () = !munify_on
 let set_use_munify b =
-  if b then try Evarconv.set_evar_conv unify_evar_conv with _ -> ();
+  if b then try Evarconv.set_evar_conv unify_new with _ -> ();
   munify_on := b
 
 let _ = Goptions.declare_bool_option {
