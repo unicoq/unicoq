@@ -623,7 +623,8 @@ let fill_lambdas_invert_types map env sigma nc body subst args ev =
     let ars = CList.drop_last ars in
     invert map sigma nc ty subst ars ev >>= fun (m, ty) ->
     rmap := m;
-    return (ars, mkLambda (Namegen.named_hd env sigma ty Anonymous, ty, bdy))) args (return (args, body))
+    let n = Namegen.named_hd env sigma ty Anonymous in
+    return (ars, mkLambda (Context.make_annot n Sorts.Relevant, ty, bdy))) args (return (args, body))
   >>= fun (_, bdy) -> return (!rmap, bdy)
 
 exception ProjectionNotFound
@@ -1411,18 +1412,20 @@ module struct
   and check_product dbg env sigma ty (name, a) =
     let nc = EConstr.named_context env in
     let naid = Namegen.next_name_away name (Termops.vars_of_env env) in
-    let nc' = CND.of_tuple (naid, None, a) :: nc in
+    let nc' = CND.of_tuple (Context.make_annot naid Sorts.Relevant, None, a) :: nc in
     let sigma', univ = Evd.new_univ_variable Evd.univ_flexible sigma in
     let evi = Evd.make_evar (EConstr.val_of_named_context nc') (EConstr.mkType univ) in
     let sigma'',v = Evarutil.new_pure_evar_full sigma' evi in
     let idsubst = Array.of_list (mkRel 1 :: id_substitution nc) in
-    unify_constr ~conv_t:R.CUMUL env ty (mkProd (Names.Name naid, a, mkEvar(v, idsubst))) (dbg, sigma'')
+    unify_constr ~conv_t:R.CUMUL env ty
+      (mkProd (Context.make_annot (Names.Name naid) Sorts.Relevant, a, mkEvar(v, idsubst)))
+      (dbg, sigma'')
 
   and eta_match conv_t env (name, a, t1) (th, tl as t) (dbg, sigma0 ) =
     let env' = EConstr.push_rel (crd_of_tuple (name, None, a)) env in
     let t' = applist (lift 1 th, List.map (lift 1) tl @ [mkRel 1]) in
     let ty = Retyping.get_type_of env sigma0 (applist t) in
-    check_product dbg env sigma0 ty (name, a) &&=
+    check_product dbg env sigma0 ty (name.binder_name, a) &&=
     unify_constr ~conv_t env' t1 t'
 end)
 
