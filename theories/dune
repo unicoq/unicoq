@@ -1,0 +1,6 @@
+(coqlib
+ (name Unicoq) ; This determines the -R flag
+ (public_name unicoq.Unicoq)
+ (synopsis "Unicoq Plugin")
+ (libraries unicoq.plugin))
+
