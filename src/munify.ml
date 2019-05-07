@@ -680,8 +680,8 @@ let check_conv_record sigma (t1,l1) (t2,l2) =
 
 let evar_apprec ts env sigma (c, stack) =
   let rec aux s =
-    let ((t,stack),cststack) =
-      RO.(whd_betaiota_deltazeta_for_iota_state ts env sigma Cst_stack.empty s) in
+    let ((t,stack)) =
+      RO.(whd_betaiota_deltazeta_for_iota_state ts env sigma s) in
     match kind sigma t with
     | Evar (evk,eva) when Evd.is_defined sigma evk ->
       aux (Evd.existential_value sigma (evk,eva), stack)
