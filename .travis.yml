@@ -10,7 +10,7 @@ env:
   - NJOBS="2"
   - CONTRIB_NAME="unicoq"
   matrix:
-  - COQ_IMAGE="coqorg/coq:dev"
+  - COQ_IMAGE="ocaml/opam2:4.05"
 
 install: |
   # Prepare the COQ container
@@ -20,8 +20,11 @@ install: |
     echo \"Build triggered by ${TRAVIS_EVENT_TYPE}\"
     export PS4='+ \e[33;1m(\$0 @ line \$LINENO) \$\e[0m '
     set -ex  # -e = exit on failure; -x = trace for debug
-    # opam update -y
-    # opam install -y -j ${NJOBS} coq-mathcomp-ssreflect
+    opam repo add coq-released https://coq.inria.fr/opam/released
+    opam repo add coq-core-dev https://coq.inria.fr/opam/core-dev
+    opam repo list
+    sudo apt install -y m4
+    opam install -y coq.dev
     opam config list
     opam repo list
     opam list
