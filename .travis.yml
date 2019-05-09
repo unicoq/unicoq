@@ -24,7 +24,7 @@ install: |
     opam repo add coq-core-dev https://coq.inria.fr/opam/core-dev
     opam repo list
     sudo apt install -y m4
-    opam install -y coq.dev
+    opam install -v -y coq.dev
     opam config list
     opam repo list
     opam list
