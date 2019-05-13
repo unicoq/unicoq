@@ -37,13 +37,7 @@ let munify_on = ref false
 let debug = ref false
 
 let set_debug b =
-  debug := b;
-  if b then
-    begin
-      (* Evar instances might depend on Anonymous rels *)
-      Detyping.set_detype_anonymous
-        (fun ?loc n -> Id.of_string ("_ANONYMOUS_REL_" ^ string_of_int n))
-    end
+  debug := b
 
 let get_debug () = !debug
 
