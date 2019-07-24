@@ -1,0 +1,4 @@
+CAMLPKGS += -package num
+
+merlin-hook::
+	$(HIDE)echo 'PKG num' >> .merlin
