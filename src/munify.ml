@@ -660,14 +660,24 @@ let check_conv_record sigma (t1,l1) (t2,l2) =
       with Not_found ->
 	lookup_canonical_conversion (proji, Default_cs),[]
     in
-    let t, { o_DEF = c; o_INJ=n; o_TABS = bs;
+    let t, { o_DEF = c; o_CTX = ctx; o_INJ=n; o_TABS = bs;
           o_TPARAMS = params; o_NPARAMS = nparams; o_TCOMPS = us } = canon_s in
     let params1, c1, extra_args1 =
       match CList.chop nparams l1 with
 	| params1, c1::extra_args1 -> params1, c1, extra_args1
 	| _ -> raise Not_found in
     let us2,extra_args2 = CList.chop (List.length us) l2_effective in
-    c,bs,(params,params1),(us,us2),(extra_args1,extra_args2),c1,
+    let c = EConstr.of_constr c in
+    let u, ctx' = UnivGen.fresh_instance_from ctx None in
+    let sigma = Evd.merge_context_set (UState.univ_flexible) sigma ctx' in
+    let subst = Univ.make_inverse_instance_subst u in
+    let c' = subst_univs_level_constr subst c in
+    (* let t' = EConstr.of_constr t' in *)
+    (* let t' = subst_univs_level_constr subst t' in *)
+    let bs' = List.map (fun c -> EConstr.to_constr sigma (subst_univs_level_constr subst (EConstr.of_constr c))) bs in
+    let params = List.map (fun c -> EConstr.to_constr sigma (subst_univs_level_constr subst (EConstr.of_constr c))) params in
+    let us = List.map (fun c -> EConstr.to_constr sigma (subst_univs_level_constr subst (EConstr.of_constr c))) us in
+    sigma,c',bs',(params,params1),(us,us2),(extra_args1,extra_args2),c1,
     (n,applist(t2,l2))
   with Failure _ | Not_found ->
     raise ProjectionNotFound
@@ -995,7 +1005,7 @@ module struct
       Err dbg
 
   and conv_record dbg env evd t t' =
-    let (c,bs,(params,params1),(us,us2),(ts,ts1),c1,(n,t2)) = check_conv_record evd t t' in
+    let (evd,c,bs,(params,params1),(us,us2),(ts,ts1),c1,(n,t2)) = check_conv_record evd t t' in
     let (evd',ks,_) =
       List.fold_left
         (fun (i,ks,m) b ->
@@ -1012,7 +1022,7 @@ module struct
       log_eq_spine env "CS" R.CONV t t' (dbg, evd') &&=
       ise_list2 (fun x1 x -> unify_constr env x1 (substl ks x)) params1 (List.map of_constr params) &&=
       ise_list2 (fun u1 u -> unify_constr env u1 (substl ks u)) us2 (List.map of_constr us) &&=
-      unify' env (decompose_app evd' c1) (of_constr c,(List.rev ks)) &&=
+      unify' env (decompose_app evd' c1) (c,(List.rev ks)) &&=
       ise_list2 (unify_constr env) ts ts1)
 
   and try_app_fo conv_t env (c, l as t) (c', l' as t') sigma dbg =
