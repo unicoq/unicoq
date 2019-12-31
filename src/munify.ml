@@ -798,10 +798,10 @@ module Inst = functor (U : Unifier) -> struct
 	  | Evar (evk2, _) ->
             (* ?X : Π Δ. Type i = ?Y : Π Δ'. Type j.
 	       The body of ?X and ?Y just has to be of type Π Δ. Type k for some k <= i, j. *)
-	    let evienv = Evd.evar_env evi in
+	    let evienv = Evd.evar_env env evi in
 	    let ctx1, i = R.dest_arity evienv (EConstr.to_constr ~abort_on_undefined_evars:false sigma evi.Evd.evar_concl) in
 	    let evi2 = Evd.find sigma evk2 in
-	    let evi2env = Evd.evar_env evi2 in
+	    let evi2env = Evd.evar_env env evi2 in
 	    let ctx2, j = R.dest_arity evi2env (EConstr.to_constr ~abort_on_undefined_evars:false sigma evi2.Evd.evar_concl) in
 	    let ui, uj = Sorts.univ_of_sort i, Sorts.univ_of_sort j in
 	    if i == j || Evd.check_eq sigma ui uj then (* Shortcut, i = j *)
