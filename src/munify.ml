@@ -43,7 +43,6 @@ let get_debug () = !debug
 
 let _ = Goptions.declare_bool_option {
   Goptions.optdepr  = false;
-  Goptions.optname  = "Debugging for unification";
   Goptions.optkey   = ["Unicoq";"Debug"];
   Goptions.optread  = get_debug;
   Goptions.optwrite = set_debug
@@ -52,7 +51,6 @@ let _ = Goptions.declare_bool_option {
 let trace = ref false
 let _ = Goptions.declare_bool_option {
   Goptions.optdepr  = false;
-  Goptions.optname  = "Prints the trace for unification";
   Goptions.optkey   = ["Unicoq";"Trace"];
   Goptions.optread  = (fun () -> !trace);
   Goptions.optwrite = (fun b -> trace := b);
@@ -61,7 +59,6 @@ let _ = Goptions.declare_bool_option {
 let dump = ref false
 let _ = Goptions.declare_bool_option {
   Goptions.optdepr  = false;
-  Goptions.optname  = "Prints every equality received";
   Goptions.optkey   = ["Unicoq";"Dump";"Equalities"];
   Goptions.optread  = (fun () -> !dump);
   Goptions.optwrite = (fun b -> dump := b);
@@ -70,7 +67,6 @@ let _ = Goptions.declare_bool_option {
 let latex_file = ref ""
 let _ = Goptions.declare_string_option {
   Goptions.optdepr = false;
-  Goptions.optname = "Outputs the successful unification tree in this latex file, if distinct from nil";
   Goptions.optkey = ["Unicoq";"LaTex";"File"];
   Goptions.optread = (fun () -> !latex_file);
   Goptions.optwrite = (fun s-> latex_file := s);
@@ -89,7 +85,6 @@ let set_super_aggressive b =
 
 let _ = Goptions.declare_bool_option {
   Goptions.optdepr = false;
-  Goptions.optname = "Enable more aggressive prunning";
   Goptions.optkey = ["Unicoq"; "Aggressive"];
   Goptions.optread = is_aggressive;
   Goptions.optwrite = set_aggressive;
@@ -97,9 +92,6 @@ let _ = Goptions.declare_bool_option {
 
 let _ = Goptions.declare_bool_option {
   Goptions.optdepr = false;
-  Goptions.optname =
-    "Enable super aggressive prunning, moving arguments applied to a meta-variable" ^
-      " to its context (can then be pruned): ?X n -> ?Y[n]. Implies aggressive.";
   Goptions.optkey = ["Unicoq"; "Super"; "Aggressive"];
   Goptions.optread = is_super_aggressive;
   Goptions.optwrite = set_super_aggressive;
@@ -111,7 +103,6 @@ let get_solving_eqn () = !try_solving_eqn
 
 let _ = Goptions.declare_bool_option {
   Goptions.optdepr  = false;
-  Goptions.optname  = "Try using original algorithm to solve equations ?x = t";
   Goptions.optkey   = ["Unicoq"; "Try"; "Solving";"Eqn"];
   Goptions.optread  = get_solving_eqn;
   Goptions.optwrite = set_solving_eqn
@@ -124,7 +115,6 @@ let use_hash () = !hash
 
 let _ = Goptions.declare_bool_option {
   Goptions.optdepr = false;
-  Goptions.optname = "Use a hash table of failures";
   Goptions.optkey = ["Unicoq"; "Use";"Hash"];
   Goptions.optread = use_hash;
   Goptions.optwrite = set_hash;
@@ -1480,7 +1470,6 @@ let set_use_munify b =
 
 let _ = Goptions.declare_bool_option {
   Goptions.optdepr = false;
-  Goptions.optname = "Enable use of new unification algorithm";
   Goptions.optkey = ["Use";"Unicoq"];
   Goptions.optread = use_munify;
   Goptions.optwrite = set_use_munify;
