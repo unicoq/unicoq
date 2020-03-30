@@ -783,7 +783,7 @@ module Inst = functor (U : Unifier) -> struct
   let instantiate' dir conv_t env (ev, subs as uv) args (h, args') (dbg, sigma) =
     let args, args' = remove_equal_tail sigma (mkEvar uv, args) (h, args') in
     (* beta-reduce to remove dependencies *)
-    let t = RO.whd_beta sigma (applist (h, args')) in
+    let t = RO.whd_beta env sigma (applist (h, args')) in
     let evi = Evd.find_undefined sigma ev in
     let nc = Evd.evar_filtered_context evi in
     let res =
