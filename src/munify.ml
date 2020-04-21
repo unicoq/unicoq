@@ -341,7 +341,7 @@ let _is_same_evar sigma i1 ev2 =
 
 let isVarOrRel sigma c = isVar sigma c || isRel sigma c
 
-let is_variable_subs sigma = CArray.for_all (fun c -> isVar sigma c || isRel sigma c)
+let is_variable_subs sigma = List.for_all (fun c -> isVar sigma c || isRel sigma c)
 
 let is_variable_args sigma = List.for_all (fun c -> isVar sigma c || isRel sigma c)
 
@@ -492,7 +492,7 @@ let invert map sigma ctx (t : EConstr.t) subs args ev' =
 		else
 		  raise Exit
 	  in
-	  try return (mkEvar (ev, Array.mapi f evargs))
+	  try return (mkEvar (ev, List.mapi f evargs))
 	  with Exit -> None
 	end
       | _ ->
@@ -689,6 +689,7 @@ let eq_app_stack sigma (c, l) (c', l') =
   eq_constr sigma c c' && List.for_all2 (eq_constr sigma) l l'
 
 let remove_non_var env sigma (ev, subs as evsubs) args =
+  let subs = Array.of_list subs in
   let ps = CArray.fold_right_i (fun i a s ->
     if isVarOrRel sigma a && not (array_mem_to_i a i subs || List.mem a args) then s
     else i::s) subs [] in
@@ -777,7 +778,7 @@ module Inst = functor (U : Unifier) -> struct
     let evi = Evd.find_undefined sigma ev in
     let nc = Evd.evar_filtered_context evi in
     let res =
-      let subsl = Array.to_list subs in
+      let subsl = subs in
       invert Evar.Map.empty sigma nc t subsl args ev >>= fun (map, t') ->
       fill_lambdas_invert_types map env sigma nc t' subsl args ev >>= fun (map, t') ->
       let sigma = prune_all map sigma in
@@ -1033,7 +1034,7 @@ module struct
       if k1 = k2 then
         (* Meta-Same *)
         begin
-          let (b,p) = unify_same dbg env sigma0 k1 s1 s2 in
+          let (b,p) = unify_same dbg env sigma0 k1 (Array.of_list s1) (Array.of_list s2) in
           let dbg, sigma = match p with
             | Success (dbg, sigma) -> dbg, sigma
             | Err dbg -> dbg, sigma0
@@ -1050,7 +1051,7 @@ module struct
 	  (* Meta-Meta: we try both directions, but first the one with the
            longest substitution. *)
           let dir1, dir2, var1, var2, term1, term2 =
-            if Array.length s1 > Array.length s2 then
+            if List.length s1 > List.length s2 then
               Original, Swap, (e1, l), (e2, l'), t', t
             else
               Swap, Original, (e2, l'), (e1, l), t, t'
@@ -1410,7 +1411,7 @@ module struct
     let sigma', univ = Evd.new_univ_variable Evd.univ_flexible sigma in
     let evi = Evd.make_evar (EConstr.val_of_named_context nc') (EConstr.mkType univ) in
     let sigma'',v = Evarutil.new_pure_evar_full sigma' evi in
-    let idsubst = Array.of_list (mkRel 1 :: id_substitution nc) in
+    let idsubst = (mkRel 1 :: id_substitution nc) in
     unify_constr ~conv_t:R.CUMUL env ty
       (mkProd (Context.make_annot (Names.Name naid) Sorts.Relevant, a, mkEvar(v, idsubst)))
       (dbg, sigma'')
