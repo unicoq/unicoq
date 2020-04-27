@@ -917,19 +917,24 @@ module struct
   (** Given a head term c and with arguments l it whd reduces c if it is
       an evar, returning the new head and list of arguments.
   *)
-  let rec decompose_evar sigma (c, l) =
+  let rec decompose_evar env sigma (c, l) =
     let (c', l') = decompose_app sigma c in
     if isCast sigma c' then
       let (t, _, _) = destCast sigma c' in
-      decompose_evar sigma (t, l' @ l)
+      decompose_evar env sigma (t, l' @ l)
+    else if isProj sigma c' then
+      let (pr, record_value) = destProj sigma c' in
+      let app = Retyping.expand_projection env sigma pr record_value l' in
+      let (c', l') = destApp sigma app in
+      c', Array.to_list l'
     else
       (c', l' @ l)
 
   (** {3 "The Function" is split into several} *)
   let rec unify' ?(conv_t=R.CONV) env t t' (dbg, sigma) =
     assert (not (isApp sigma (fst t) || isApp sigma (fst t')));
-    let (c, l as t) = decompose_evar sigma t in
-    let (c', l' as t') = decompose_evar sigma t' in
+    let (c, l as t) = decompose_evar env sigma t in
+    let (c', l' as t') = decompose_evar env sigma t' in
     if !dump then debug_eq env sigma conv_t t t' 0;
     try_conv conv_t env t t' (dbg, sigma) ||= fun dbg ->
       try_hash env t t' (dbg, sigma) &&= fun (dbg, sigma) ->
