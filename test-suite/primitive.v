@@ -33,3 +33,17 @@ Module Test2.
     c.
 
 End Test2.
+
+
+(* With a field that has a function type *)
+Module Test3.
+
+  Record cs (A : Type) := { ty : Type; #[canonical(false)] f : ty -> Type }.
+  Canonical Structure cs_unit {A} : cs A := {| f := fun 'tt => unit |}.
+
+  Definition x :=
+    let c : cs nat := _ in
+    let x := (fun (u : f _ c tt) => u) (tt) in
+    c.
+
+End Test3.
