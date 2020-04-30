@@ -1173,6 +1173,10 @@ module struct
         log_eq env "Rigid-Same" conv_t c c' (dbg, sigma0) &&=
         use_evar_conv env c c')
 
+    | Proj (c1, t1), Proj (c2, t2) when Names.Projection.equal c1 c2 ->
+      report (
+        log_eq env "Proj-Same" conv_t c c' (dbg, sigma0) &&=
+        unify_constr env t1 t2)
     | CoFix (i1,(_,tys1,bds1 as recdef1)), CoFix (i2,(_,tys2,bds2))
       when i1 = i2 ->
       report (
