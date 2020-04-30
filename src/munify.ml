@@ -632,9 +632,18 @@ exception ProjectionNotFound
    object c in structure R (since, if c1 were not an evar, the
    projection would have been reduced) *)
 
-let check_conv_record sigma (t1,l1) (t2,l2) =
+let check_conv_record env sigma (t1,l1) (t2,l2) =
   try
-    let proji,_inst = Termops.global_of_constr sigma t1 in
+    let (proji,_inst), l1 = try
+        Termops.global_of_constr sigma t1, l1
+      with Not_found ->
+        let t1, r1 = try destProj sigma t1 with Constr.DestKO -> raise Not_found in
+        let app = Retyping.expand_projection env sigma t1 r1 l1 in
+        let t1, l1 = destApp sigma app in
+        let c1, inst = destConst sigma t1 in
+        let gr1 = GlobRef.ConstRef c1 in
+        (gr1, inst), Array.to_list l1
+    in
     let canon_s,l2_effective =
       try
 	match kind sigma t2 with
@@ -908,24 +917,19 @@ module struct
   (** Given a head term c and with arguments l it whd reduces c if it is
       an evar, returning the new head and list of arguments.
   *)
-  let rec decompose_evar env sigma (c, l) =
+  let rec decompose_evar sigma (c, l) =
     let (c', l') = decompose_app sigma c in
     if isCast sigma c' then
       let (t, _, _) = destCast sigma c' in
-      decompose_evar env sigma (t, l' @ l)
-    else if isProj sigma c' then
-      let (pr, record_value) = destProj sigma c' in
-      let app = Retyping.expand_projection env sigma pr record_value l' in
-      let (c', l') = destApp sigma app in
-      c', Array.to_list l'
+      decompose_evar sigma (t, l' @ l)
     else
       (c', l' @ l)
 
   (** {3 "The Function" is split into several} *)
   let rec unify' ?(conv_t=R.CONV) env t t' (dbg, sigma) =
     assert (not (isApp sigma (fst t) || isApp sigma (fst t')));
-    let (c, l as t) = decompose_evar env sigma t in
-    let (c', l' as t') = decompose_evar env sigma t' in
+    let (c, l as t) = decompose_evar sigma t in
+    let (c', l' as t') = decompose_evar sigma t' in
     if !dump then debug_eq env sigma conv_t t t' 0;
     try_conv conv_t env t t' (dbg, sigma) ||= fun dbg ->
       try_hash env t t' (dbg, sigma) &&= fun (dbg, sigma) ->
@@ -992,7 +996,8 @@ module struct
       | _ -> Err dbg
 
   and try_canonical_structures env (c, _ as t) (c', _ as t') sigma dbg =
-    if (isConst sigma c || isConst sigma c') && not (eq_constr sigma c c') then
+    if (isConst sigma c || isConst sigma c' || isProj sigma c || isProj sigma c')
+        && not (eq_constr sigma c c') then
       try conv_record dbg env sigma t t'
       with ProjectionNotFound ->
       try conv_record dbg env sigma t' t
@@ -1001,7 +1006,7 @@ module struct
       Err dbg
 
   and conv_record dbg env evd t t' =
-    let (evd,c,bs,(params,params1),(us,us2),(ts,ts1),c1,(n,t2)) = check_conv_record evd t t' in
+    let (evd,c,bs,(params,params1),(us,us2),(ts,ts1),c1,(n,t2)) = check_conv_record env evd t t' in
     let (evd',ks,_) =
       List.fold_left
         (fun (i,ks,m) b ->
@@ -1168,6 +1173,10 @@ module struct
         log_eq env "Rigid-Same" conv_t c c' (dbg, sigma0) &&=
         use_evar_conv env c c')
 
+    | Proj (c1, t1), Proj (c2, t2) when Names.Projection.equal c1 c2 ->
+      report (
+        log_eq env "Proj-Same" conv_t c c' (dbg, sigma0) &&=
+        unify_constr env t1 t2)
     | CoFix (i1,(_,tys1,bds1 as recdef1)), CoFix (i2,(_,tys2,bds2))
       when i1 = i2 ->
       report (
