@@ -30,13 +30,13 @@ Installation
 The plugin works currently with Coq v8.5. Through OPAM,
 this plugin is available in the [Coq's repository](http://coq.io/opam/):
 ```
- opam repo add coq-released https://coq.inria.fr/opam/released
+opam repo add coq-released https://coq.inria.fr/opam/released
 opam install coq-unicoq
 ```
 Otherwise, you should have coqc, ocamlc and make in your path.
 Then simply do:
 ```
- coq_makefile -f Make -o Makefile
+coq_makefile -f Make -o Makefile
 ```
 To generate a makefile from the description in Make, then `make`.
 This will consecutively build the plugin, the supporting
