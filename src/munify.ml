@@ -21,8 +21,10 @@ open Big_int
 module RO = Reductionops
 module R = Reduction
 module EU = Evarutil
+module ES = Evarsolve
 module CND = Context.Named.Declaration
 module CRD = Context.Rel.Declaration
+module PE = Pretype_errors
 
 let crd_of_tuple (x,y,z) = match y with
   | Some y -> CRD.LocalDef(x,y,z)
@@ -196,46 +198,44 @@ let return x = Some x
 (** {2 The return type of unification} *)
 
 (** The type of returned values by the algorithm. *)
-type unif =
-    Success of Logger.log * Evd.evar_map
-  | Err of Logger.log
+type unif = Logger.log * ES.unification_result
 
 (** Returns Success after logging it. *)
-let success (l,v) =
+let success (l, sigma) =
   let l = Logger.reportSuccess l in
-  Success (l,v)
+  (l, ES.Success sigma)
 
 (** Returns Err after logging it. *)
-let err l =
+let err (l, sigma) =
   let l = Logger.reportErr l in
-  Err l
+  (l, ES.UnifFailure (sigma, PE.NotSameHead))
 
 (** Logs a success or an error according to s. *)
-let report s =
+let report (l, s) =
   match s with
-  | Success (l, v) -> success (l, v)
-  | Err l -> err l
+  | ES.Success sigma -> success (l, sigma)
+  | ES.UnifFailure (sigma, _) -> err (l, sigma)
 
-let is_success s = match s with Success _ -> true | _ -> false
+let is_success s = match s with ES.Success _ -> true | _ -> false
 
 (** {3 Monadic style operations for the unif type} *)
-let (&&=) opt f =
-  match opt with
-  | Success (l, x) -> f (l, x)
+let (&&=) (l, s as opt) f =
+  match s with
+  | ES.Success sigma -> f (l, sigma)
   | _ -> opt
 
-let (||=) opt f =
-  match opt with
-  | Err l -> f l
+let (||=) (l, s as opt) f =
+  match s with
+  | ES.UnifFailure (sigma, _) -> f (l, sigma)
   | _ -> opt
 
 let ise_list2 f l1 l2 =
   let rec ise_list2 l1 l2 (l, evd) =
     match l1,l2 with
-      [], [] -> Success (l, evd)
+      [], [] -> (l, ES.Success evd)
     | x::l1, y::l2 ->
       f x y (l, evd) &&= ise_list2 l1 l2
-    | _ -> Err l in
+    | _ -> (l, ES.UnifFailure (evd, PE.NotSameHead)) in
   ise_list2 l1 l2
 
 let ise_array2 f v1 v2 evd =
@@ -244,7 +244,7 @@ let ise_array2 f v1 v2 evd =
   assert (l1 <= l2) ;
   let diff = l2 - l1 in
   let rec allrec n (l, evdi) =
-    if n >= l1 then Success (l, evdi)
+    if n >= l1 then (l, ES.Success evdi)
     else
       f v1.(n) v2.(n+diff) (l, evdi) &&=
       allrec (n+1)
@@ -266,7 +266,7 @@ let latexify s =
 
 let log_eq env rule conv_t t1 t2 (l, sigma) =
   if not (get_debug () || !trace) then
-    Success (l, sigma)
+    (l, ES.Success sigma)
   else
     let ppcmd_of env (t : EConstr.t) =
       try Printer.pr_econstr_env env sigma t
@@ -278,11 +278,11 @@ let log_eq env rule conv_t t1 t2 (l, sigma) =
     let str1 = latexify str1 in
     let str2 = latexify str2 in
     let l = Logger.newNode !trace (rule, (conv_t, str1, str2)) l in
-    Success (l, sigma)
+    (l, ES.Success sigma)
 
 let log_eq_spine env rule conv_t t1 t2 (l, sigma as dsigma) =
   if not (get_debug () || !trace) then
-    Success (l, sigma)
+    (l, ES.Success sigma)
   else
     log_eq env rule conv_t (applist t1) (applist t2) dsigma
 
@@ -586,14 +586,14 @@ let intersect env sigma s1 s2 =
 (** pre: ev is not defined *)
 let unify_same dbg env sigma ev subs1 subs2 =
   match intersect env sigma subs1 subs2 with
-  | Some [] -> (false, Success (dbg, sigma))
+  | Some [] -> (false, (dbg, ES.Success sigma))
   | Some l ->
     begin
       try
-        (true, Success (dbg, prune sigma (ev, l)))
-      with CannotPrune -> (false, Err dbg)
+        (true, (dbg, ES.Success (prune sigma (ev, l))))
+      with CannotPrune -> (false, (dbg, ES.UnifFailure (sigma, PE.NotSameHead)))
     end
-  | _ -> (false, Err dbg)
+  | _ -> (false, (dbg, ES.UnifFailure (sigma, PE.NotSameHead)))
 
 (** given a list of arguments [args] = [x1 .. xn], a [body] with free
     indices [1 .. n], and a substitution [subst] with context [nc] it
@@ -815,19 +815,19 @@ module Inst = functor (U : Unifier) -> struct
 	    let ctx2, j = R.dest_arity evi2env (EConstr.to_constr ~abort_on_undefined_evars:false sigma evi2.Evd.evar_concl) in
 	    let ui, uj = Sorts.univ_of_sort i, Sorts.univ_of_sort j in
 	    if i == j || Evd.check_eq sigma ui uj then (* Shortcut, i = j *)
-	      Success (dbg, sigma)
+	      (dbg, ES.Success sigma)
 	    else if Evd.check_leq sigma ui uj then
               let t2 = it_mkProd_or_LetIn (mkSort i) (List.map of_rel_decl ctx2) in
-	      Success (dbg, Evd.downcast evk2 t2 sigma)
+	      (dbg, ES.Success (Evd.downcast evk2 t2 sigma))
             else if Evd.check_leq sigma uj ui then
 	      let t1 = it_mkProd_or_LetIn (mkSort j) (List.map of_rel_decl ctx1) in
-              Success (dbg, Evd.downcast ev t1 sigma)
+              (dbg, ES.Success (Evd.downcast ev t1 sigma))
 	    else
               let sigma, k = Evd.new_sort_variable Evd.univ_flexible_alg sigma in
 	      let t1 = it_mkProd_or_LetIn (mkSort k) (List.map of_rel_decl ctx1) in
 	      let t2 = it_mkProd_or_LetIn (mkSort k) (List.map of_rel_decl ctx2) in
 	      let sigma = Evd.set_leq_sort env (Evd.set_leq_sort env sigma k i) k j in
-	      Success (dbg, Evd.downcast evk2 t2 (Evd.downcast ev t1 sigma))
+	      (dbg, ES.Success (Evd.downcast evk2 t2 (Evd.downcast ev t1 sigma)))
 	  | _ -> raise R.NotArity
 	  with R.NotArity ->
 	    let ty' = Retyping.get_type_of env sigma t'' in
@@ -835,16 +835,16 @@ module Inst = functor (U : Unifier) -> struct
 	in
 	let p = unifty &&= fun (dbg, sigma) ->
 	    if Termops.occur_meta sigma t' (* || Termops.occur_evar ev t' *) then
-	      Err dbg
+	      (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
 	    else
 	      (dstats.instantiations <- succ_big_int dstats.instantiations;
-	       Success (dbg, Evd.define ev t' sigma))
+	       (dbg, ES.Success (Evd.define ev t' sigma)))
 	in
 	  Some p
     in
     match res with
     | Some r -> r
-    | None -> Err dbg
+    | None -> (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
 end
 
 (** forward the use of evar conv *)
@@ -852,9 +852,9 @@ let use_evar_conv env t1 t2 (dbg, sigma) : unif =
   let open Evarconv in
   try
     let sigma = Evarconv.unify_delay env sigma t1 t2 in
-    Success (dbg, sigma)
-  with UnableToUnify _ ->
-    Err dbg
+    (dbg, ES.Success sigma)
+  with UnableToUnify (sigma, err) ->
+    (dbg, ES.UnifFailure (sigma, err))
 
 (** The main module *)
 let rec unif (module P : Params) : (module Unifier) = (
@@ -884,11 +884,13 @@ module struct
   let try_hash env sp1 sp2 (dbg, sigma as dsigma) =
     if use_hash () && tblfind tbl (sigma, env, sp1, sp2) then
       begin
-        log_eq_spine env "Hash-Hit" R.CONV sp1 sp2 dsigma &&= fun (dbg, _) ->
-          report (Err dbg)
+        log_eq_spine env "Hash-Hit" R.CONV sp1 sp2 dsigma &&= fun (dbg, sigma) ->
+          report (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
+      (* TODO Something is funky here: it returns error on a success
+         and the other way around?? *)
       end
     else
-      Success (dbg, sigma)
+      (dbg, ES.Success sigma)
 
   (** {3 Conversion check} *)
   let ground_spine sigma (h, args) =
@@ -899,12 +901,12 @@ module struct
       let app1 = applist sp1 and app2 = applist sp2 in
       try
         begin match RO.infer_conv ~pb:conv_t ~ts:P.flags.closed_ts env sigma0 app1 app2 with
-        | None -> Err dbg
+        | None -> (dbg, ES.UnifFailure (sigma0, PE.NotSameHead))
         | Some sigma1 ->
           report (log_eq_spine env "Reduce-Same" conv_t sp1 sp2 (dbg, sigma1))
         end
-      with Univ.UniverseInconsistency _ -> Err dbg
-    else Err dbg
+      with Univ.UniverseInconsistency _ -> (dbg, ES.UnifFailure (sigma0, PE.NotSameHead))
+    else (dbg, ES.UnifFailure (sigma0, PE.NotSameHead))
 
 
 (* let debug_env env sigma c = *)
@@ -931,20 +933,20 @@ module struct
     let (c, l as t) = decompose_evar sigma t in
     let (c', l' as t') = decompose_evar sigma t' in
     if !dump then debug_eq env sigma conv_t t t' 0;
-    try_conv conv_t env t t' (dbg, sigma) ||= fun dbg ->
+    try_conv conv_t env t t' (dbg, sigma) ||= fun (dbg, sigma) ->
       try_hash env t t' (dbg, sigma) &&= fun (dbg, sigma) ->
         let res =
           if isEvar sigma c || isEvar sigma c' then
             one_is_meta dbg conv_t env sigma t t'
           else
             begin
-              try_run_and_unify env t t' sigma dbg
-              ||= try_canonical_structures env t t' sigma
-              ||= try_app_fo conv_t env t t' sigma
-              ||= try_step conv_t env t t' sigma
+              try_run_and_unify env t t' (dbg, sigma)
+              ||= try_canonical_structures env t t'
+              ||= try_app_fo conv_t env t t'
+              ||= try_step conv_t env t t'
             end
         in
-        if not (is_success res) && use_hash () then
+        if not (is_success (snd res)) && use_hash () then
           Hashtbl.add tbl (sigma, env, t, t') true;
         res
 
@@ -959,23 +961,23 @@ module struct
     dstats.unif_problems <- succ_big_int dstats.unif_problems;
     Hashtbl.clear tbl;
     match unify_constr ~conv_t:conv_t env t t' (Logger.init, sigma0) with
-    | Success (log, sigma') ->
+    | (log, ES.Success sigma') ->
       if get_debug () && interesting log then
         begin
           Logger.print_latex !latex_file print_eq log;
           Logger.print_to_stdout log;
         end
       else ();
-      Evarsolve.Success sigma'
-    | Err log ->
+      ES.Success sigma'
+    | (log, ES.UnifFailure (sigma, e)) ->
       if get_debug () then Logger.print_to_stdout log;
-      Evarsolve.UnifFailure (sigma0, Pretype_errors.NotSameHead)
+      ES.UnifFailure (sigma, e)
 
   (** (Beta) This is related to Mtac, and is part of my thesis. The
       idea is to allow for the execution of (arbitrary) code during
       unification. At some point I need to either remove this, or
       prove it is an useful thing to have... *)
-  and try_run_and_unify env (c, l as t) (c', l' as t') sigma dbg =
+  and try_run_and_unify env (c, l as t) (c', l' as t') (dbg, sigma) =
     if (isConst sigma c || isConst sigma c') && not (eq_constr sigma c c') then
       begin
         if is_lift env sigma c && List.length l = 3 then
@@ -983,27 +985,27 @@ module struct
         else if is_lift env sigma c' && List.length l' = 3 then
 	  run_and_unify dbg env sigma l' t
         else
-	  Err dbg
+	  (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
       end
     else
-      Err dbg
+      (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
 
   and run_and_unify dbg env sigma0 args ty =
     let a, f, v = List.nth args 0, List.nth args 1, List.nth args 2 in
     unify' ~conv_t:R.CUMUL env (decompose_app sigma0 a) ty (dbg, sigma0) &&= fun (dbg, sigma1) ->
       match !run_function env sigma1 f with
       | Some (sigma2, v') -> unify' env (decompose_app sigma2 v) (decompose_app sigma2 v') (dbg, sigma2)
-      | _ -> Err dbg
+      | _ -> (dbg, ES.UnifFailure (sigma1, PE.NotSameHead))
 
-  and try_canonical_structures env (c, _ as t) (c', _ as t') sigma dbg =
+  and try_canonical_structures env (c, _ as t) (c', _ as t') (dbg, sigma) =
     if (isConst sigma c || isConst sigma c' || isProj sigma c || isProj sigma c')
         && not (eq_constr sigma c c') then
       try conv_record dbg env sigma t t'
       with ProjectionNotFound ->
       try conv_record dbg env sigma t' t
-      with ProjectionNotFound -> Err dbg
+      with ProjectionNotFound -> (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
     else
-      Err dbg
+      (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
 
   and conv_record dbg env evd t t' =
     let (evd,c,bs,(params,params1),(us,us2),(ts,ts1),c1,(n,t2)) = check_conv_record env evd t t' in
@@ -1026,7 +1028,7 @@ module struct
       unify' env (decompose_app evd' c1) (c,(List.rev ks)) &&=
       ise_list2 (unify_constr env) ts ts1)
 
-  and try_app_fo conv_t env (c, l as t) (c', l' as t') sigma dbg =
+  and try_app_fo conv_t env (c, l as t) (c', l' as t') (dbg, sigma) =
     if List.length l = List.length l' then
       begin
         report (
@@ -1036,7 +1038,7 @@ module struct
         )
       end
     else
-      Err dbg
+      (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
 
   and one_is_meta dbg conv_t env sigma0 (c, l as t) (c', l' as t') =
     if isEvar sigma0 c && isEvar sigma0 c' then
@@ -1045,16 +1047,16 @@ module struct
         (* Meta-Same *)
         begin
           let (b,p) = unify_same dbg env sigma0 k1 (Array.of_list s1) (Array.of_list s2) in
-          let dbg, sigma = match p with
-            | Success (dbg, sigma) -> dbg, sigma
-            | Err dbg -> dbg, sigma0
+          let dbg, sigma = fst p, match snd p with
+            | ES.Success sigma -> sigma
+            | ES.UnifFailure (sigma, _) -> sigma
           in
           let rule = if b then "Meta-Same" else "Meta-Same-Same" in
           log_eq_spine env rule conv_t t t' (dbg, sigma) &&= fun (dbg, sigma) ->
-            if is_success p then
+            if is_success (snd p) then
               report (ise_list2 (unify_constr env) l l' (dbg, sigma))
             else
-              report (Err dbg)
+              report (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
         end
       else
         begin
@@ -1066,15 +1068,15 @@ module struct
             else
               Swap, Original, (e2, l'), (e1, l), t, t'
           in
-          meta_inst dir1 conv_t env var1 term1 sigma0 dbg
-          ||= meta_inst dir2 conv_t env var2 term2 sigma0
-          ||= meta_fo dir1 conv_t env var1 term1 sigma0
-          ||= meta_fo dir2 conv_t env var2 term2 sigma0
-          ||= meta_deldeps dir1 conv_t env var1 term1 sigma0
-          ||= meta_deldeps dir2 conv_t env var2 term2 sigma0
-          ||= meta_specialize dir1 conv_t env var1 term1 sigma0
-          ||= meta_specialize dir2 conv_t env var2 term2 sigma0
-          ||= try_solve_simple_eqn conv_t env var1 term1 sigma0
+          meta_inst dir1 conv_t env var1 term1 (dbg, sigma0)
+          ||= meta_inst dir2 conv_t env var2 term2
+          ||= meta_fo dir1 conv_t env var1 term1
+          ||= meta_fo dir2 conv_t env var2 term2
+          ||= meta_deldeps dir1 conv_t env var1 term1
+          ||= meta_deldeps dir2 conv_t env var2 term2
+          ||= meta_specialize dir1 conv_t env var1 term1
+          ||= meta_specialize dir2 conv_t env var2 term2
+          ||= try_solve_simple_eqn conv_t env var1 term1
         end
     else
     if isEvar sigma0 c then
@@ -1091,26 +1093,26 @@ module struct
       let e2 = destEvar sigma0 c' in
       instantiate ~dir:Swap conv_t env (e2, l') t sigma0 dbg
 
-  and try_solve_simple_eqn ?(dir=Original) conv_t env (evsubs, args) t sigma dbg =
+  and try_solve_simple_eqn ?(dir=Original) conv_t env (evsubs, args) t (dbg, sigma) =
     if get_solving_eqn () then
       try
-        (* XXXXXX: Why the [] here!! *)
-        let t = Evarsolve.solve_pattern_eqn env sigma [] (applist t) in
+        (* TODO: Why the [] here!! *)
+        let t = ES.solve_pattern_eqn env sigma [] (applist t) in
         let pbty = match conv_t with
 	    R.CONV -> None
           | R.CUMUL -> Some (dir == Original)
         in
-        match Evarsolve.solve_simple_eqn (fun _flags _k -> unify_evar_conv) P.flags env sigma (pbty, evsubs, t) with
-          Evarsolve.Success sigma' ->
+        match ES.solve_simple_eqn (fun _flags _k -> unify_evar_conv) P.flags env sigma (pbty, evsubs, t) with
+          ES.Success sigma' ->
           Printf.printf "%s" "solve_simple_eqn solved it: ";
 	  debug_eq env sigma R.CONV (mkEvar evsubs, []) (decompose_app sigma t) 0;
-	  Success (dbg, sigma')
-	| Evarsolve.UnifFailure (sigma', error) -> Err dbg
+	  (dbg, ES.Success sigma')
+	| e -> (dbg, e)
       with _ ->
         Printf.printf "%s" "solve_simple_eqn failed!";
-        Err dbg
+        (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
     else
-      Err dbg
+      (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
 
   and compare_heads conv_t env c c' (dbg, sigma0) =
     let rigid_same sigma = report (log_eq env "Rigid-Same" conv_t c c' (dbg, sigma)) in
@@ -1124,11 +1126,11 @@ module struct
               | R.CONV -> Evd.set_eq_sort env sigma0 (ESorts.kind sigma0 s1) (ESorts.kind sigma0 s2)
 	      | R.CUMUL -> Evd.set_leq_sort env sigma0 (ESorts.kind sigma0 s1) (ESorts.kind sigma0 s2)
             in
-            report (Success (dbg, sigma1))
+            report (dbg, ES.Success sigma1)
           with Univ.UniverseInconsistency e ->
 	    debug_str (Printf.sprintf "Type-Same exception: %s"
 		  (Pp.string_of_ppcmds (Univ.explain_universe_inconsistency Univ.Level.pr e))) 0;
-          report (Err dbg)
+          report (dbg, ES.UnifFailure (sigma0, PE.NotSameHead))
         end
 
     (* Lam-Same *)
@@ -1199,12 +1201,12 @@ module struct
         ise_array2 (unify_constr (push_rec_types_econstr sigma0 recdef1 env)) bds1 bds2)
 
     | _, _ ->
-      Err dbg
+      (dbg, ES.UnifFailure (sigma0, PE.NotSameHead))
 
   and push_rec_types_econstr sigma (a, l, m) env =
     Environ.push_rec_types (a, Array.map (to_constr ~abort_on_undefined_evars:false sigma) l, Array.map (to_constr ~abort_on_undefined_evars:false sigma) m) env
 
-  and try_step ?(stuck=NotStucked) conv_t env (c, l as t) (c', l' as t') sigma0 dbg =
+  and try_step ?(stuck=NotStucked) conv_t env (c, l as t) (c', l' as t') (dbg, sigma0) =
     match (kind sigma0 c, kind sigma0 c') with
     (* Lam-BetaR *)
     | _, Lambda (_, _, trm) when reduce_right && not (CList.is_empty l') ->
@@ -1229,8 +1231,8 @@ module struct
 	    unify' ~conv_t env t t2)
 	end
       else if stuck = NotStucked then
-	try_step ~stuck:StuckedRight conv_t env t t' sigma0 dbg
-      else Err dbg
+	try_step ~stuck:StuckedRight conv_t env t t' (dbg, sigma0)
+      else (dbg, ES.UnifFailure (sigma0, PE.NotSameHead))
 
     (* Lam-BetaL *)
     | Lambda (_, _, trm), _ when reduce_left && not (CList.is_empty l) ->
@@ -1255,14 +1257,14 @@ module struct
 	  unify' ~conv_t env t2 t')
 	end
       else if stuck == NotStucked then
-	try_step ~stuck:StuckedLeft conv_t env t t' sigma0 dbg
-      else Err dbg
+	try_step ~stuck:StuckedLeft conv_t env t t' (dbg, sigma0)
+      else (dbg, ES.UnifFailure (sigma0, PE.NotSameHead))
 
     (* Constants get unfolded after everything else *)
     | (_, Const _ | _, Rel _ | _, Var _)
       when reduce_right && has_definition sigma0 P.flags.open_ts env c' && stuck == NotStucked ->
       if is_stuck env sigma0 t' then
-        try_step ~stuck:StuckedRight conv_t env t t' sigma0 dbg
+        try_step ~stuck:StuckedRight conv_t env t t' (dbg, sigma0)
       else report (
           log_eq_spine env "Cons-DeltaNotStuckR" conv_t t t' (dbg, sigma0) &&=
           unify' ~conv_t env t (evar_apprec P.flags.open_ts env sigma0 (get_def_app_stack sigma0 env t')))
@@ -1294,7 +1296,7 @@ module struct
         log_eq_spine env "Lam-EtaL" conv_t t t' (dbg, sigma0) &&=
         eta_match conv_t env (name, t1, c1) t')
 
-    | _, _ -> Err dbg
+    | _, _ -> (dbg, ES.UnifFailure (sigma0, PE.NotSameHead))
 
   and is_stuck env sigma (hd, args) =
     let (hd, args) = evar_apprec P.flags.open_ts env sigma (try_unfolding sigma P.flags.open_ts env hd, args) in
@@ -1308,7 +1310,7 @@ module struct
       | App _| Cast _ -> assert false
     in is_unnamed (hd, args)
 
-  and meta_inst dir conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
+  and meta_inst dir conv_t env (ev, subs as evsubs, args) (h, args' as t) (dbg, sigma) =
     if must_inst dir ev && is_variable_subs sigma subs && is_variable_args sigma args then
       begin
         try
@@ -1322,11 +1324,11 @@ module struct
           report (log_eq_spine env "Meta-Inst" conv_t (mkEvar evsubs, args) t (dbg, sigma) &&=
                   let module I' = Inst(U') in
                   I'.instantiate' dir conv_t env evsubs args t)
-        with CannotPrune -> report (Err dbg)
+        with CannotPrune -> report (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
       end
-    else Err dbg
+    else (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
 
-  and meta_deldeps dir conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
+  and meta_deldeps dir conv_t env (ev, subs as evsubs, args) (h, args' as t) (dbg, sigma) =
     if is_aggressive () && must_inst dir ev then
       begin
         try
@@ -1334,11 +1336,11 @@ module struct
           report (
             log_eq_spine env "Meta-DelDeps" conv_t (mkEvar evsubs, args) t (dbg, sigma') &&=
             switch dir (unify' ~conv_t env) (evsubs', args'') t)
-        with CannotPrune -> Err dbg
+        with CannotPrune -> (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
       end
-    else Err dbg
+    else (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
 
-  and meta_specialize dir conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
+  and meta_specialize dir conv_t env (ev, subs as evsubs, args) (h, args' as t) (dbg, sigma) =
     if !super_aggressive && must_inst dir ev then
       begin
         try
@@ -1346,11 +1348,11 @@ module struct
           report (
             log_eq_spine env "Meta-Specialize" conv_t (mkEvar evsubs, args) t (dbg, sigma') &&=
             switch dir (unify' ~conv_t env) (evsubst', args'') t)
-        with CannotPrune -> Err dbg
+        with CannotPrune -> (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
       end
-    else Err dbg
+    else (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
 
-  and meta_reduce dir conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
+  and meta_reduce dir conv_t env (ev, subs as evsubs, args) (h, args' as t) (dbg, sigma) =
     (* Meta-Reduce: before giving up we see if we can reduce on the right *)
     if must_inst dir ev && ((dir == Original && reduce_right) || (dir == Swap && reduce_left)) then
       if has_definition sigma P.flags.open_ts env h then
@@ -1369,12 +1371,12 @@ module struct
                 log_eq_spine env "Meta-Reduce" conv_t (mkEvar evsubs, args) t (dbg, sigma) &&=
                 switch dir (unify' ~conv_t env) (mkEvar evsubs, args) t')
             end
-          else Err dbg
+          else (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
         end
     else
-      Err dbg
+      (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
 
-  and meta_eta dir conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
+  and meta_eta dir conv_t env (ev, subs as evsubs, args) (h, args' as t) (dbg, sigma) =
     (* if the equation is [?f =?= \x.?f x] the occurs check will fail, but there is a solution: eta expansion *)
     if must_inst dir ev && isLambda sigma h && List.length args' = 0 then
       begin
@@ -1383,25 +1385,26 @@ module struct
           eta_match conv_t env (destLambda sigma h) (mkEvar evsubs, args))
       end
     else
-      Err dbg
+      (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
 
   (* by invariant, we know that ev is uninstantiated *)
   and instantiate ?(dir=Original) conv_t env
       (_, _ as evsubs) (h, args' as t) sigma dbg =
-    meta_inst dir conv_t env evsubs t sigma dbg
-    ||= meta_fo dir conv_t env evsubs t sigma
-    ||= meta_deldeps dir conv_t env evsubs t sigma
-    ||= meta_specialize dir conv_t env evsubs t sigma
-    ||= meta_reduce dir conv_t env evsubs t sigma
-    ||= meta_eta dir conv_t env evsubs t sigma
-    ||= try_solve_simple_eqn conv_t env evsubs t sigma
+    meta_inst dir conv_t env evsubs t (dbg, sigma)
+    ||= meta_fo dir conv_t env evsubs t
+    ||= meta_deldeps dir conv_t env evsubs t
+    ||= meta_specialize dir conv_t env evsubs t
+    ||= meta_reduce dir conv_t env evsubs t
+    ||= meta_eta dir conv_t env evsubs t
+    ||= try_solve_simple_eqn conv_t env evsubs t
 
   and should_try_fo args (h, args') =
     List.length args > 0 && List.length args' >= List.length args
 
   (* ?e a1 a2 = h b1 b2 b3 ---> ?e = h b1 /\ a1 = b2 /\ a2 = b3 *)
-  and meta_fo dir conv_t env ((ev, _ as evsubs), args) (h, args' as t) sigma dbg =
-    if not (should_try_fo args t) || not (must_inst dir ev) then Err dbg
+  and meta_fo dir conv_t env ((ev, _ as evsubs), args) (h, args' as t) (dbg, sigma) =
+    if not (should_try_fo args t) || not (must_inst dir ev) then
+      (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
     else
       let (args'1,args'2) =
         CList.chop (List.length args'-List.length args) args' in
