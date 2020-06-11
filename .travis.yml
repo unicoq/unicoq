@@ -36,7 +36,7 @@ script:
     export PS4='+ \e[33;1m(\$0 @ line \$LINENO) \$\e[0m '
     set -ex
     sudo chown -R opam:opam /home/coq/${CONTRIB_NAME}
-    coq_makefile -f Make -o Makefile
+    coq_makefile -f _CoqProject -o Makefile
     make
     "
 - docker stop COQ  # optional
