@@ -4,8 +4,9 @@
 
 An enhanced unification algorithm for Coq
 
-Copyright (c) 2015 Beta Ziliani <bziliani@famaf.unc.edu.ar>,
-	           Matthieu Sozeau <mattam@mattam.org>
+Copyright (c) 2015--2020
+	Beta Ziliani <bziliani@famaf.unc.edu.ar>,
+    Matthieu Sozeau <mattam@mattam.org>
 
 Distributed under the terms of the MIT License,
 see LICENSE for details.
@@ -17,18 +18,19 @@ algorithm is described in detail in
 and Overloading](http://www.mpi-sws.org/~beta/#publications).
 
 The archive has 3 subdirectories:
-* `src` contains the code of the plugin in `munify.ml4`.
+* `src` contains the code of the plugin in `munify.ml`.
 
 * `theories` contains support Coq files for the plugin.
   `Unicoq.v` declares the plugin on the Coq side.
 
-* `test-suite` just demonstrates a use of the plugin
+* `test-suite` just tests and demonstrates the use of the plugin
 
 Installation
 ============
 
-The plugin works currently with Coq v8.5. Through OPAM,
-this plugin is available in the [Coq's repository](http://coq.io/opam/):
+The plugin works currently with Coq master, although there are releases
+for previous versions as well. Through OPAM, this plugin is available
+in the [Coq's repository](http://coq.io/opam/):
 ```
 opam repo add coq-released https://coq.inria.fr/opam/released
 opam install coq-unicoq
@@ -36,7 +38,7 @@ opam install coq-unicoq
 Otherwise, you should have coqc, ocamlc and make in your path.
 Then simply do:
 ```
-coq_makefile -f Make -o Makefile
+coq_makefile -f _CoqProject -o Makefile
 ```
 To generate a makefile from the description in Make, then `make`.
 This will consecutively build the plugin, the supporting
