@@ -236,7 +236,7 @@ let (&&=) (l, s as opt) f =
 
 let (||=) (l, s as opt) f =
   match s with
-  | ES.UnifFailure (sigma, _) -> f (l, sigma)
+  | ES.UnifFailure _ -> f l
   | _ -> opt
 
 let ise_list2 f l1 l2 =
@@ -298,14 +298,18 @@ let log_eq_spine env rule conv_t t1 t2 (l, sigma as dsigma) =
 
 let debug_str s _l =
   if !debug then
-    Printf.printf "%s\n" s
+    begin
+      Printf.printf "%s\n" s;
+      flush_all ()
+    end
   else
     ()
 
 let debug_eq env sigma t c1 c2 _l =
   let s1 = string_of_ppcmds (Printer.pr_econstr_env env sigma (applist c1)) in
   let s2 = string_of_ppcmds (Printer.pr_econstr_env env sigma (applist c2)) in
-  Printf.printf "%s %s %s\n" (if t == R.CONV then "=?=" else "<?=") s1 s2
+  Printf.printf "%s %s %s\n" s1 (if t == R.CONV then "=?=" else "<?=") s2;
+  flush_all ()
 
 let print_eq f (conv_t, c1, c2) =
   output_string f "\\lstinline{";
@@ -731,10 +735,18 @@ let specialize_evar env sigma (ev, subs) args =
 
 (** Enum type to specify on which side of the equation an action is taken *)
 type which_side = Left | Right | Both | NoAction
+(* let ws_to_string = function
+ *   | Left -> "Left"
+ *   | Right -> "Right"
+ *   | Both -> "Both"
+ *   | NoAction -> "NoAction" *)
 
 (** Enum type indicating if the algorithm must swap the lhs and rhs. *)
 type direction = Original | Swap
 let switch dir f t u = if dir == Original then f t u else f u t
+(* let dir_to_string = function
+ *   | Original -> "Original"
+ *   | Swap -> "Swap" *)
 
 (** Enum type indicating where it is useless to reduce. *)
 type stucked = NotStucked | StuckedLeft | StuckedRight
@@ -789,17 +801,17 @@ module Inst = functor (U : Unifier) -> struct
     (List.rev xs, List.rev ys)
 
   (* pre: args and args' are lists of vars and/or rels. subs is an array of rels and vars. *)
-  let instantiate' dir conv_t env (ev, subs as uv) args (h, args') (dbg, sigma) =
-    let args, args' = remove_equal_tail sigma (mkEvar uv, args) (h, args') in
+  let instantiate' dir conv_t env (ev, subs as uv) args (h, args') (dbg, sigma0) =
+    let args, args' = remove_equal_tail sigma0 (mkEvar uv, args) (h, args') in
     (* beta-reduce to remove dependencies *)
-    let t = RO.whd_beta sigma (applist (h, args')) in
-    let evi = Evd.find_undefined sigma ev in
+    let t = RO.whd_beta sigma0 (applist (h, args')) in
+    let evi = Evd.find_undefined sigma0 ev in
     let nc = Evd.evar_filtered_context evi in
     let res =
       let subsl = Array.to_list subs in
-      invert Evar.Map.empty sigma nc t subsl args ev >>= fun (map, t') ->
-      fill_lambdas_invert_types map env sigma nc t' subsl args ev >>= fun (map, t') ->
-      let sigma = prune_all map sigma in
+      invert Evar.Map.empty sigma0 nc t subsl args ev >>= fun (map, t') ->
+      fill_lambdas_invert_types map env sigma0 nc t' subsl args ev >>= fun (map, t') ->
+      let sigma = prune_all map sigma0 in
       let sigma, t' =
 	Evarsolve.refresh_universes
 	    (if conv_t == R.CUMUL && isArity sigma t' then
@@ -844,7 +856,7 @@ module Inst = functor (U : Unifier) -> struct
 	in
 	let p = unifty &&= fun (dbg, sigma) ->
 	    if Termops.occur_meta sigma t' (* || Termops.occur_evar ev t' *) then
-	      (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
+	      (dbg, ES.UnifFailure (sigma0, PE.NotSameHead))
 	    else
 	      (dstats.instantiations <- succ_big_int dstats.instantiations;
 	       (dbg, ES.Success (Evd.define ev t' sigma)))
@@ -853,7 +865,7 @@ module Inst = functor (U : Unifier) -> struct
     in
     match res with
     | Some r -> r
-    | None -> (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
+    | None -> (dbg, ES.UnifFailure (sigma0, PE.NotSameHead))
 end
 
 (** forward the use of evar conv *)
@@ -873,7 +885,7 @@ module struct
       1) It must be in match_evars (assuming match_evars is Some set).
       2) The instantiation matches the direction in which it is being performed.
   *)
-  let must_inst dir e =
+  let must_inst (dir: direction) (e: Evar.t) =
     Option.cata (Evar.Set.mem e) true P.match_evars &&
     (P.winst == Both
     || (P.winst == Left && dir == Original)
@@ -942,7 +954,7 @@ module struct
     let (c, l as t) = decompose_evar sigma t in
     let (c', l' as t') = decompose_evar sigma t' in
     if !dump then debug_eq env sigma conv_t t t' 0;
-    try_conv conv_t env t t' (dbg, sigma) ||= fun (dbg, sigma) ->
+    try_conv conv_t env t t' (dbg, sigma) ||= fun dbg ->
       try_hash env t t' (dbg, sigma) &&= fun (dbg, sigma) ->
         let res =
           if isEvar sigma c || isEvar sigma c' then
@@ -950,9 +962,9 @@ module struct
           else
             begin
               try_run_and_unify env t t' (dbg, sigma)
-              ||= try_canonical_structures env t t'
-              ||= try_app_fo conv_t env t t'
-              ||= try_step conv_t env t t'
+              ||= try_canonical_structures env t t' sigma
+              ||= try_app_fo conv_t env t t' sigma
+              ||= fun dbg -> try_step conv_t env t t' (dbg, sigma)
             end
         in
         if not (is_success (snd res)) && use_hash () then
@@ -1006,7 +1018,7 @@ module struct
       | Some (sigma2, v') -> unify' env (decompose_app sigma2 v) (decompose_app sigma2 v') (dbg, sigma2)
       | _ -> (dbg, ES.UnifFailure (sigma1, PE.NotSameHead))
 
-  and try_canonical_structures env (c, _ as t) (c', _ as t') (dbg, sigma) =
+  and try_canonical_structures env (c, _ as t) (c', _ as t') sigma dbg =
     if (isConst sigma c || isConst sigma c' || isProj sigma c || isProj sigma c')
         && not (eq_constr sigma c c') then
       try conv_record dbg env sigma t t'
@@ -1037,7 +1049,7 @@ module struct
       unify' env (decompose_app evd' c1) (c,(List.rev ks)) &&=
       ise_list2 (unify_constr env) ts ts1)
 
-  and try_app_fo conv_t env (c, l as t) (c', l' as t') (dbg, sigma) =
+  and try_app_fo conv_t env (c, l as t) (c', l' as t') sigma dbg =
     if List.length l = List.length l' then
       begin
         report (
@@ -1077,32 +1089,34 @@ module struct
             else
               Swap, Original, (e2, l'), (e1, l), t, t'
           in
-          meta_inst dir1 conv_t env var1 term1 (dbg, sigma0)
-          ||= meta_inst dir2 conv_t env var2 term2
-          ||= meta_fo dir1 conv_t env var1 term1
-          ||= meta_fo dir2 conv_t env var2 term2
-          ||= meta_deldeps dir1 conv_t env var1 term1
-          ||= meta_deldeps dir2 conv_t env var2 term2
-          ||= meta_specialize dir1 conv_t env var1 term1
-          ||= meta_specialize dir2 conv_t env var2 term2
-          ||= try_solve_simple_eqn conv_t env var1 term1
+          meta_inst dir1 conv_t env var1 term1 sigma0 dbg
+          ||= meta_inst dir2 conv_t env var2 term2 sigma0
+          ||= meta_fo dir1 conv_t env var1 term1 sigma0
+          ||= meta_fo dir2 conv_t env var2 term2 sigma0
+          ||= meta_deldeps dir1 conv_t env var1 term1 sigma0
+          ||= meta_deldeps dir2 conv_t env var2 term2 sigma0
+          ||= meta_specialize dir1 conv_t env var1 term1 sigma0
+          ||= meta_specialize dir2 conv_t env var2 term2 sigma0
+          ||= try_solve_simple_eqn conv_t env var1 term1 sigma0
         end
     else
     if isEvar sigma0 c then
       if is_lift env sigma0 c' && List.length l' = 3 then
         run_and_unify dbg env sigma0 l' t
       else
-        let e1 = destEvar sigma0 c in
-        instantiate conv_t env (e1, l) t' sigma0 dbg
-
+        begin
+          let e1 = destEvar sigma0 c in
+          instantiate conv_t env (e1, l) t' sigma0 dbg
+        end
     else
     if is_lift env sigma0 c && List.length l = 3 then
       run_and_unify dbg env sigma0 l t
     else
-      let e2 = destEvar sigma0 c' in
-      instantiate ~dir:Swap conv_t env (e2, l') t sigma0 dbg
-
-  and try_solve_simple_eqn ?(dir=Original) conv_t env (evsubs, args) t (dbg, sigma) =
+      begin
+        let e2 = destEvar sigma0 c' in
+        instantiate ~dir:Swap conv_t env (e2, l') t sigma0 dbg
+      end
+  and try_solve_simple_eqn ?(dir=Original) conv_t env (evsubs, args) t sigma dbg =
     if get_solving_eqn () then
       try
         (* TODO: Why the [] here!! *)
@@ -1319,7 +1333,7 @@ module struct
       | App _| Cast _ -> assert false
     in is_unnamed (hd, args)
 
-  and meta_inst dir conv_t env (ev, subs as evsubs, args) (h, args' as t) (dbg, sigma) =
+  and meta_inst dir conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
     if must_inst dir ev && is_variable_subs sigma subs && is_variable_args sigma args then
       begin
         try
@@ -1337,7 +1351,7 @@ module struct
       end
     else (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
 
-  and meta_deldeps dir conv_t env (ev, subs as evsubs, args) (h, args' as t) (dbg, sigma) =
+  and meta_deldeps dir conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
     if is_aggressive () && must_inst dir ev then
       begin
         try
@@ -1349,7 +1363,7 @@ module struct
       end
     else (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
 
-  and meta_specialize dir conv_t env (ev, subs as evsubs, args) (h, args' as t) (dbg, sigma) =
+  and meta_specialize dir conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
     if !super_aggressive && must_inst dir ev then
       begin
         try
@@ -1361,15 +1375,15 @@ module struct
       end
     else (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
 
-  and meta_reduce dir conv_t env (ev, subs as evsubs, args) (h, args' as t) (dbg, sigma) =
+  and meta_reduce dir conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
     (* Meta-Reduce: before giving up we see if we can reduce on the right *)
     if must_inst dir ev && ((dir == Original && reduce_right) || (dir == Swap && reduce_left)) then
       if has_definition sigma P.flags.open_ts env h then
         begin
           let t' = evar_apprec P.flags.open_ts env sigma (get_def_app_stack sigma env t) in
           report (
-            log_eq_spine env "Meta-Reduce" conv_t (mkEvar evsubs, args) t (dbg, sigma) &&=
-            switch dir (unify' ~conv_t env) (mkEvar evsubs, args) t')
+            log_eq_spine env "Meta-Reduce" conv_t (mkEvar evsubs, args) t (dbg, sigma) &&= fun pax ->
+            switch dir (unify' ~conv_t env) (mkEvar evsubs, args) t' pax)
         end
       else
         begin
@@ -1377,15 +1391,16 @@ module struct
           if not (eq_app_stack sigma t t') then
             begin
               report (
-                log_eq_spine env "Meta-Reduce" conv_t (mkEvar evsubs, args) t (dbg, sigma) &&=
-                switch dir (unify' ~conv_t env) (mkEvar evsubs, args) t')
+                log_eq_spine env "Meta-Reduce" conv_t (mkEvar evsubs, args) t (dbg, sigma) &&= fun pax ->
+                switch dir (unify' ~conv_t env) (mkEvar evsubs, args) t' pax)
             end
-          else (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
+          else
+            (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
         end
     else
       (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
 
-  and meta_eta dir conv_t env (ev, subs as evsubs, args) (h, args' as t) (dbg, sigma) =
+  and meta_eta dir conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
     (* if the equation is [?f =?= \x.?f x] the occurs check will fail, but there is a solution: eta expansion *)
     if must_inst dir ev && isLambda sigma h && List.length args' = 0 then
       begin
@@ -1399,19 +1414,19 @@ module struct
   (* by invariant, we know that ev is uninstantiated *)
   and instantiate ?(dir=Original) conv_t env
       (_, _ as evsubs) (h, args' as t) sigma dbg =
-    meta_inst dir conv_t env evsubs t (dbg, sigma)
-    ||= meta_fo dir conv_t env evsubs t
-    ||= meta_deldeps dir conv_t env evsubs t
-    ||= meta_specialize dir conv_t env evsubs t
-    ||= meta_reduce dir conv_t env evsubs t
-    ||= meta_eta dir conv_t env evsubs t
-    ||= try_solve_simple_eqn conv_t env evsubs t
+    meta_inst dir conv_t env evsubs t sigma dbg
+    ||= meta_fo dir conv_t env evsubs t sigma
+    ||= meta_deldeps dir conv_t env evsubs t sigma
+    ||= meta_specialize dir conv_t env evsubs t sigma
+    ||= meta_reduce dir conv_t env evsubs t sigma
+    ||= meta_eta dir conv_t env evsubs t sigma
+    ||= try_solve_simple_eqn conv_t env evsubs t sigma
 
   and should_try_fo args (h, args') =
     List.length args > 0 && List.length args' >= List.length args
 
   (* ?e a1 a2 = h b1 b2 b3 ---> ?e = h b1 /\ a1 = b2 /\ a2 = b3 *)
-  and meta_fo dir conv_t env ((ev, _ as evsubs), args) (h, args' as t) (dbg, sigma) =
+  and meta_fo dir conv_t env ((ev, _ as evsubs), args) (h, args' as t) sigma dbg =
     if not (should_try_fo args t) || not (must_inst dir ev) then
       (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
     else
