@@ -17,6 +17,3 @@ depends: [
   "coq"
 ]
 synopsis: "An enhanced unification algorithm for Coq"
-url {
-  src: "https://github.com/unicoq/unicoq/"
-}
