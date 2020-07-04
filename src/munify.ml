@@ -771,6 +771,13 @@ module type Unifier = sig
                      ?unify_types:bool ->
                      Environ.env ->
                      EConstr.t -> EConstr.t -> Logger.log * Evd.evar_map -> unif
+
+  val instantiate : R.conv_pb ->
+           bool ->
+           Environ.env ->
+           EConstr.t Constr.pexistential * EConstr.t list ->
+           EConstr.t * EConstr.t list ->
+           Evd.evar_map -> ES.unification_result
 end
 
 module type UnifT = functor (P : Params) -> Unifier
@@ -852,8 +859,13 @@ module Inst = functor (U : Unifier) -> struct
 	      (dbg, ES.Success (Evd.downcast evk2 t2 (Evd.downcast ev t1 sigma)))
 	  | _ -> raise R.NotArity
 	  with R.NotArity ->
-	    let ty' = Retyping.get_type_of env sigma t'' in
-            U.unify_constr ~conv_t:R.CUMUL env ty' ty (dbg, sigma)
+            if unify_types then begin
+                let ty' = Retyping.get_type_of env sigma t'' in
+                U.unify_constr ~conv_t:R.CUMUL env ty' ty (dbg, sigma)
+              end
+            else
+              (dbg, ES.Success sigma)
+              
 	in
 	let p = unifty &&= fun (dbg, sigma) ->
 	    if Termops.occur_meta sigma t' (* || Termops.occur_evar ev t' *) then
@@ -1464,6 +1476,22 @@ module struct
     let ty = Retyping.get_type_of env sigma0 (applist t) in
     check_product dbg env sigma0 ty (name.binder_name, a) &&=
     unify_constr ~conv_t ~unify_types env' t1 t'
+
+  let instantiate conv_t unify_types env
+        (_, _ as evsubs) (h, args' as t) sigma =
+    Hashtbl.clear tbl;
+    match instantiate ~unify_types conv_t env evsubs t (Logger.init, sigma) with
+    | (log, ES.Success sigma) ->
+       if get_debug () then
+         begin
+           Logger.print_latex !latex_file print_eq log;
+           Logger.print_to_stdout log;
+         end;
+       ES.Success sigma
+    | (log, ES.UnifFailure (sigma, e)) ->
+       if get_debug () then Logger.print_to_stdout log;
+       ES.UnifFailure (sigma, e)
+
 end)
 
 let unify_new flags =
@@ -1505,6 +1533,17 @@ let unify_match_nored evars ts =
   end : Params) in
   let module M = (val unif (module P)) in
   M.unify_evar_conv
+
+let instantiate ?(conv_t=R.CONV) ?(unify_types=true) env
+      (_, _ as evsubs) t sigma =
+  let module P = (struct
+    let flags = Evarconv.default_flags_of TransparentState.full
+    let wreduce = Both
+    let winst = Both
+    let match_evars = None
+  end : Params) in
+  let module M = (val unif (module P)) in
+  M.instantiate conv_t unify_types env evsubs (decompose_app sigma t) sigma
 
 let use_munify () = !munify_on
 let set_use_munify b =
