@@ -14,4 +14,5 @@ theories/Unicoq.v
 test-suite/munifytest.v
 test-suite/microtests.v
 test-suite/primitive.v
+test-suite/instantiate.v
 test-suite/timings.v

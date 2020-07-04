@@ -803,7 +803,9 @@ module Inst = functor (U : Unifier) -> struct
   let instantiate' dir unify_types conv_t env (ev, subs as uv) args (h, args') (dbg, sigma0) =
     let args, args' = remove_equal_tail sigma0 (mkEvar uv, args) (h, args') in
     (* beta-reduce to remove dependencies *)
-    let t = RO.whd_beta env sigma0 (applist (h, args')) in
+    let t = if unify_types then
+              RO.whd_beta env sigma0 (applist (h, args'))
+            else (applist (h, args')) in
     let evi = Evd.find_undefined sigma0 ev in
     let nc = Evd.evar_filtered_context evi in
     let res =
