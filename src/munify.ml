@@ -768,8 +768,9 @@ module type Unifier = sig
   val unify_evar_conv : unify_fun
 
   val unify_constr : ?conv_t:R.conv_pb ->
-    Environ.env ->
-    EConstr.t -> EConstr.t -> Logger.log * Evd.evar_map -> unif
+                     ?unify_types:bool ->
+                     Environ.env ->
+                     EConstr.t -> EConstr.t -> Logger.log * Evd.evar_map -> unif
 end
 
 module type UnifT = functor (P : Params) -> Unifier
@@ -801,7 +802,7 @@ module Inst = functor (U : Unifier) -> struct
     (List.rev xs, List.rev ys)
 
   (* pre: args and args' are lists of vars and/or rels. subs is an array of rels and vars. *)
-  let instantiate' dir conv_t env (ev, subs as uv) args (h, args') (dbg, sigma0) =
+  let instantiate' dir unify_types conv_t env (ev, subs as uv) args (h, args') (dbg, sigma0) =
     let args, args' = remove_equal_tail sigma0 (mkEvar uv, args) (h, args') in
     (* beta-reduce to remove dependencies *)
     let t = RO.whd_beta sigma0 (applist (h, args')) in
@@ -851,8 +852,11 @@ module Inst = functor (U : Unifier) -> struct
 	      (dbg, ES.Success (Evd.downcast evk2 t2 (Evd.downcast ev t1 sigma)))
 	  | _ -> raise R.NotArity
 	  with R.NotArity ->
-	    let ty' = Retyping.get_type_of env sigma t'' in
-            U.unify_constr ~conv_t:R.CUMUL env ty' ty (dbg, sigma)
+            if unify_types then
+	      let ty' = Retyping.get_type_of env sigma t'' in
+              U.unify_constr ~conv_t:R.CUMUL env ty' ty (dbg, sigma)
+            else
+              (dbg, ES.Success sigma)
 	in
 	let p = unifty &&= fun (dbg, sigma) ->
 	    if Termops.occur_meta sigma t' (* || Termops.occur_evar ev t' *) then
@@ -949,7 +953,7 @@ module struct
       (c', l' @ l)
 
   (** {3 "The Function" is split into several} *)
-  let rec unify' ?(conv_t=R.CONV) env t t' (dbg, sigma) =
+  let rec unify' ?(conv_t=R.CONV) ?(unify_types=true) env t t' (dbg, sigma) =
     assert (not (isApp sigma (fst t) || isApp sigma (fst t')));
     let (c, l as t) = decompose_evar sigma t in
     let (c', l' as t') = decompose_evar sigma t' in
@@ -971,8 +975,8 @@ module struct
           Hashtbl.add tbl (sigma, env, t, t') true;
         res
 
-  and unify_constr ?(conv_t=R.CONV) env t t' (dbg, sigma) =
-    unify' ~conv_t env (decompose_app sigma t) (decompose_app sigma t') (dbg,sigma)
+  and unify_constr ?(conv_t=R.CONV) ?(unify_types=true) env t t' (dbg, sigma) =
+    unify' ~conv_t ~unify_types env (decompose_app sigma t) (decompose_app sigma t') (dbg,sigma)
 
   and unify_evar_conv env sigma0 conv_t t t' =
     let interesting log = (* if it's not just Reduce-Same *)
@@ -1089,14 +1093,14 @@ module struct
             else
               Swap, Original, (e2, l'), (e1, l), t, t'
           in
-          meta_inst dir1 conv_t env var1 term1 sigma0 dbg
-          ||= meta_inst dir2 conv_t env var2 term2 sigma0
-          ||= meta_fo dir1 conv_t env var1 term1 sigma0
-          ||= meta_fo dir2 conv_t env var2 term2 sigma0
-          ||= meta_deldeps dir1 conv_t env var1 term1 sigma0
-          ||= meta_deldeps dir2 conv_t env var2 term2 sigma0
-          ||= meta_specialize dir1 conv_t env var1 term1 sigma0
-          ||= meta_specialize dir2 conv_t env var2 term2 sigma0
+          meta_inst dir1 true conv_t env var1 term1 sigma0 dbg
+          ||= meta_inst dir2 true conv_t env var2 term2 sigma0
+          ||= meta_fo dir1 true conv_t env var1 term1 sigma0
+          ||= meta_fo dir2 true conv_t env var2 term2 sigma0
+          ||= meta_deldeps dir1 true conv_t env var1 term1 sigma0
+          ||= meta_deldeps dir2 true conv_t env var2 term2 sigma0
+          ||= meta_specialize dir1 true conv_t env var1 term1 sigma0
+          ||= meta_specialize dir2 true conv_t env var2 term2 sigma0
           ||= try_solve_simple_eqn conv_t env var1 term1 sigma0
         end
     else
@@ -1106,7 +1110,7 @@ module struct
       else
         begin
           let e1 = destEvar sigma0 c in
-          instantiate conv_t env (e1, l) t' sigma0 dbg
+          instantiate conv_t env (e1, l) t' (dbg, sigma0)
         end
     else
     if is_lift env sigma0 c && List.length l = 3 then
@@ -1114,7 +1118,7 @@ module struct
     else
       begin
         let e2 = destEvar sigma0 c' in
-        instantiate ~dir:Swap conv_t env (e2, l') t sigma0 dbg
+        instantiate ~dir:Swap conv_t env (e2, l') t (dbg, sigma0)
       end
   and try_solve_simple_eqn ?(dir=Original) conv_t env (evsubs, args) t sigma dbg =
     if get_solving_eqn () then
@@ -1333,7 +1337,7 @@ module struct
       | App _| Cast _ -> assert false
     in is_unnamed (hd, args)
 
-  and meta_inst dir conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
+  and meta_inst dir unify_types conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
     if must_inst dir ev && is_variable_subs sigma subs && is_variable_args sigma args then
       begin
         try
@@ -1346,36 +1350,36 @@ module struct
           let module U' = (val unif (module P') : Unifier) in
           report (log_eq_spine env "Meta-Inst" conv_t (mkEvar evsubs, args) t (dbg, sigma) &&=
                   let module I' = Inst(U') in
-                  I'.instantiate' dir conv_t env evsubs args t)
+                  I'.instantiate' dir unify_types conv_t env evsubs args t)
         with CannotPrune -> report (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
       end
     else (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
 
-  and meta_deldeps dir conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
+  and meta_deldeps dir unify_types conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
     if is_aggressive () && must_inst dir ev then
       begin
         try
 	  let (sigma', evsubs', args'') = remove_non_var env sigma evsubs args in
           report (
             log_eq_spine env "Meta-DelDeps" conv_t (mkEvar evsubs, args) t (dbg, sigma') &&=
-            switch dir (unify' ~conv_t env) (evsubs', args'') t)
+            switch dir (unify' ~conv_t ~unify_types env) (evsubs', args'') t)
         with CannotPrune -> (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
       end
     else (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
 
-  and meta_specialize dir conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
+  and meta_specialize dir unify_types conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
     if !super_aggressive && must_inst dir ev then
       begin
         try
           let (sigma', evsubst', args'') = specialize_evar env sigma evsubs args in
           report (
             log_eq_spine env "Meta-Specialize" conv_t (mkEvar evsubs, args) t (dbg, sigma') &&=
-            switch dir (unify' ~conv_t env) (evsubst', args'') t)
+            switch dir (unify' ~conv_t ~unify_types env) (evsubst', args'') t)
         with CannotPrune -> (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
       end
     else (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
 
-  and meta_reduce dir conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
+  and meta_reduce dir unify_types conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
     (* Meta-Reduce: before giving up we see if we can reduce on the right *)
     if must_inst dir ev && ((dir == Original && reduce_right) || (dir == Swap && reduce_left)) then
       if has_definition sigma P.flags.open_ts env h then
@@ -1391,8 +1395,8 @@ module struct
           if not (eq_app_stack sigma t t') then
             begin
               report (
-                log_eq_spine env "Meta-Reduce" conv_t (mkEvar evsubs, args) t (dbg, sigma) &&= fun pax ->
-                switch dir (unify' ~conv_t env) (mkEvar evsubs, args) t' pax)
+                log_eq_spine env "Meta-Reduce" conv_t (mkEvar evsubs, args) t (dbg, sigma) &&=
+                instantiate ~dir ~unify_types conv_t env (evsubs, args) t')
             end
           else
             (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
@@ -1400,33 +1404,33 @@ module struct
     else
       (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
 
-  and meta_eta dir conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
+  and meta_eta dir unify_types conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
     (* if the equation is [?f =?= \x.?f x] the occurs check will fail, but there is a solution: eta expansion *)
     if must_inst dir ev && isLambda sigma h && List.length args' = 0 then
       begin
         report (
           log_eq_spine env "Lam-Eta" conv_t (mkEvar evsubs, args) t (dbg, sigma) &&=
-          eta_match conv_t env (destLambda sigma h) (mkEvar evsubs, args))
+          eta_match conv_t ~unify_types env (destLambda sigma h) (mkEvar evsubs, args))
       end
     else
       (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
 
   (* by invariant, we know that ev is uninstantiated *)
-  and instantiate ?(dir=Original) conv_t env
-      (_, _ as evsubs) (h, args' as t) sigma dbg =
-    meta_inst dir conv_t env evsubs t sigma dbg
-    ||= meta_fo dir conv_t env evsubs t sigma
-    ||= meta_deldeps dir conv_t env evsubs t sigma
-    ||= meta_specialize dir conv_t env evsubs t sigma
-    ||= meta_reduce dir conv_t env evsubs t sigma
-    ||= meta_eta dir conv_t env evsubs t sigma
+  and instantiate ?(dir=Original) ?(unify_types=true) conv_t env
+      (_, _ as evsubs) (h, args' as t) (dbg, sigma) =
+    meta_inst dir unify_types conv_t env evsubs t sigma dbg
+    ||= meta_fo dir unify_types conv_t env evsubs t sigma
+    ||= meta_deldeps dir unify_types conv_t env evsubs t sigma
+    ||= meta_specialize dir unify_types conv_t env evsubs t sigma
+    ||= meta_reduce dir unify_types conv_t env evsubs t sigma
+    ||= meta_eta dir unify_types conv_t env evsubs t sigma
     ||= try_solve_simple_eqn conv_t env evsubs t sigma
 
   and should_try_fo args (h, args') =
     List.length args > 0 && List.length args' >= List.length args
 
   (* ?e a1 a2 = h b1 b2 b3 ---> ?e = h b1 /\ a1 = b2 /\ a2 = b3 *)
-  and meta_fo dir conv_t env ((ev, _ as evsubs), args) (h, args' as t) sigma dbg =
+  and meta_fo dir unify_types conv_t env ((ev, _ as evsubs), args) (h, args' as t) sigma dbg =
     if not (should_try_fo args t) || not (must_inst dir ev) then
       (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
     else
@@ -1437,10 +1441,10 @@ module struct
           log_eq_spine env "Meta-FO" conv_t (mkEvar evsubs, args)
             t (dbg, sigma) &&= fun (dbg, sigma) ->
             if dir = Original then
-              unify' ~conv_t env (mkEvar evsubs, []) (h, args'1) (dbg, sigma) &&=
+              unify' ~conv_t ~unify_types env (mkEvar evsubs, []) (h, args'1) (dbg, sigma) &&=
               ise_list2 (unify_constr env) args args'2
             else
-              unify' ~conv_t env (h, args'1) (mkEvar evsubs, []) (dbg, sigma) &&=
+              unify' ~conv_t ~unify_types env (h, args'1) (mkEvar evsubs, []) (dbg, sigma) &&=
               ise_list2 (unify_constr env) args'2 args
         ) end
 
@@ -1457,12 +1461,12 @@ module struct
       (mkProd (Context.make_annot (Names.Name naid) Sorts.Relevant, a, mkEvar(v, idsubst)))
       (dbg, sigma'')
 
-  and eta_match conv_t env (name, a, t1) (th, tl as t) (dbg, sigma0 ) =
+  and eta_match conv_t ?(unify_types=true) env (name, a, t1) (th, tl as t) (dbg, sigma0 ) =
     let env' = EConstr.push_rel (crd_of_tuple (name, None, a)) env in
     let t' = applist (lift 1 th, List.map (lift 1) tl @ [mkRel 1]) in
     let ty = Retyping.get_type_of env sigma0 (applist t) in
     check_product dbg env sigma0 ty (name.binder_name, a) &&=
-    unify_constr ~conv_t env' t1 t'
+    unify_constr ~conv_t ~unify_types env' t1 t'
 end)
 
 let unify_new flags =
