@@ -852,11 +852,8 @@ module Inst = functor (U : Unifier) -> struct
 	      (dbg, ES.Success (Evd.downcast evk2 t2 (Evd.downcast ev t1 sigma)))
 	  | _ -> raise R.NotArity
 	  with R.NotArity ->
-            if unify_types then
-	      let ty' = Retyping.get_type_of env sigma t'' in
-              U.unify_constr ~conv_t:R.CUMUL env ty' ty (dbg, sigma)
-            else
-              (dbg, ES.Success sigma)
+	    let ty' = Retyping.get_type_of env sigma t'' in
+            U.unify_constr ~conv_t:R.CUMUL env ty' ty (dbg, sigma)
 	in
 	let p = unifty &&= fun (dbg, sigma) ->
 	    if Termops.occur_meta sigma t' (* || Termops.occur_evar ev t' *) then
@@ -1387,7 +1384,7 @@ module struct
           let t' = evar_apprec P.flags.open_ts env sigma (get_def_app_stack sigma env t) in
           report (
             log_eq_spine env "Meta-Reduce" conv_t (mkEvar evsubs, args) t (dbg, sigma) &&= fun pax ->
-            switch dir (unify' ~conv_t env) (mkEvar evsubs, args) t' pax)
+            switch dir (unify' ~conv_t ~unify_types env) (mkEvar evsubs, args) t' pax)
         end
       else
         begin
@@ -1395,8 +1392,8 @@ module struct
           if not (eq_app_stack sigma t t') then
             begin
               report (
-                log_eq_spine env "Meta-Reduce" conv_t (mkEvar evsubs, args) t (dbg, sigma) &&=
-                instantiate ~dir ~unify_types conv_t env (evsubs, args) t')
+                log_eq_spine env "Meta-Reduce" conv_t (mkEvar evsubs, args) t (dbg, sigma) &&= fun pax ->
+                switch dir (unify' ~conv_t ~unify_types env) (mkEvar evsubs, args) t' pax)
             end
           else
             (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
