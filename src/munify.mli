@@ -25,6 +25,14 @@ val unify_match : Evar.Set.t -> TransparentState.t -> unify_fun
 (** Same as unify_match but with no reduction *)
 val unify_match_nored : Evar.Set.t -> TransparentState.t -> unify_fun
 
+(** Instantiates an evar `?x[subst] args` with a term `t` *)
+val instantiate : ?conv_t:Reduction.conv_pb ->
+                  ?unify_types:bool ->
+                  Environ.env ->
+                  EConstr.t Constr.pexistential * EConstr.t list ->
+                  EConstr.t ->
+                  Evd.evar_map -> ES.unification_result
+
 val get_stats : unit -> stats
 
 (** Mtac execution of tactics *)
