@@ -38,7 +38,7 @@ let understand env sigma {closure=closure;term=term} =
 
 let munify_tac gl sigma ismatch x y =
   let env = Goal.env gl in
-  let evars evm = V82.tactic (Refiner.tclEVARS evm) in
+  let evars evm = Proofview.Unsafe.tclEVARS evm in
   let (sigma, x) = understand env sigma x in
   let (sigma, y) = understand env sigma y in
   let res =

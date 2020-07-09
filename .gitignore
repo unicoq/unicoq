@@ -40,6 +40,10 @@ Makefile
 coqdoc.sty
 doc/*.html
 doc/*.css
+*.conf
+*.vok
+*.vos
+src/unitactics.ml
 
 # emacs save files
 *~
