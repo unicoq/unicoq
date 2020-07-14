@@ -1342,6 +1342,22 @@ module struct
         log_eq_spine env "Cons-DeltaL" conv_t t t' (dbg, sigma0) &&=
         unify' ~conv_t env (evar_apprec P.flags.open_ts env sigma0 (get_def_app_stack sigma0 env t)) t')
 
+    (* Unfolding of projections *)
+    | _ , Proj (p, c) ->
+       report (
+           log_eq_spine env "Proj-DeltaR" conv_t t t' (dbg, sigma0) &&=
+             let c = RO.whd_all env sigma0 c in (* reduce argument *)
+             let (_, args) = destApp sigma0 c in (* expect c to be [hd args] *)
+             let cont = (args.(Projection.npars p + Projection.arg p), l') in
+             unify' ~conv_t env t (evar_apprec P.flags.open_ts env sigma0 cont))
+    | Proj (p, c), _ ->
+       report (
+           log_eq_spine env "Proj-DeltaL" conv_t t t' (dbg, sigma0) &&=
+             let c = RO.whd_all env sigma0 c in (* reduce argument *)
+             let (_, args) = destApp sigma0 c in (* expect c to be [hd args] *)
+             let cont = (args.(Projection.npars p + Projection.arg p), l) in
+             unify' ~conv_t env (evar_apprec P.flags.open_ts env sigma0 cont) t')
+       
     (* Lam-EtaR *)
     | _, Lambda (name, t1, c1) when reduce_right && CList.is_empty l' && not (isLambda sigma0 c) ->
       report (

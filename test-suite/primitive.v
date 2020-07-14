@@ -18,7 +18,7 @@ The term "tt" has type "unit" while it is expected to have type "ty c".
     let c : cs := _ in
     let x := (fun (u : ty c) => u) (tt) in
     c.
-
+    
 End Test1.
 
 (* Similar to Test1 but with parameters *)
@@ -45,5 +45,23 @@ Module Test3.
     let c : cs nat := _ in
     let x := (fun (u : f _ c tt) => u) (tt) in
     c.
+
+  Canonical Structure cs_nat {A} : cs A := {|
+    f := fun n => match n with 0 => nat | _ => nat end
+  |}.
+
+  Definition reduceR :=
+    let x : cs nat := cs_nat in
+    let scr : nat := _ in
+    let T := f _ x scr in
+    let other := _ in
+    eq_refl : (match other with 0 => nat | _ => nat end : Type, other) = (T, 0).
+
+  Definition reduceL :=
+    let x : cs nat := cs_nat in
+    let scr : nat := _ in
+    let T := f _ x scr in
+    let other := _ in
+    eq_refl : (T, other) = (match other with 0 => nat | _ => nat end : Type, 0).
 
 End Test3.
