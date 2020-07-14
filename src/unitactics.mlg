@@ -59,8 +59,10 @@ let minstantiate_tac gl sigma x y =
   let evars evm = Proofview.Unsafe.tclEVARS evm in
   let (sigma, x) = understand env sigma x in
   let (sigma, y) = understand env sigma y in
+  let options = current_options () in
+  let options = ref { options with inst_unify_types = false } in 
   let res =
-    instantiate ~conv_t:Reduction.CUMUL ~unify_types:false env (EConstr.destEvar sigma x, []) y sigma
+    instantiate ~conv_t:Reduction.CUMUL ~options env (EConstr.destEvar sigma x, []) y sigma
   in
   match res with
   | Evarsolve.Success evm -> evars evm
