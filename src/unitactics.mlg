@@ -53,6 +53,21 @@ let munify_tac gl sigma ismatch x y =
   | Evarsolve.Success evm -> evars evm
   | Evarsolve.UnifFailure _ -> Tacticals.New.tclFAIL 0 (str"Unification failed")
 
+
+let minstantiate_tac gl sigma x y =
+  let env = Goal.env gl in
+  let evars evm = Proofview.Unsafe.tclEVARS evm in
+  let (sigma, x) = understand env sigma x in
+  let (sigma, y) = understand env sigma y in
+  let options = current_options () in
+  let options = ref { options with inst_unify_types = false } in 
+  let res =
+    instantiate ~conv_t:Reduction.CUMUL ~options env (EConstr.destEvar sigma x, []) y sigma
+  in
+  match res with
+  | Evarsolve.Success evm -> evars evm
+  | Evarsolve.UnifFailure _ -> Tacticals.New.tclFAIL 0 (str"Unification failed")
+
 }
 
 (* This adds an entry to the grammar of tactics, similar to what
@@ -67,13 +82,21 @@ TACTIC EXTEND munify_tac
   }
 END
 
-
 TACTIC EXTEND mmatch_tac
 | ["mmatch" uconstr(c) uconstr(c') ] ->
   { Proofview.Goal.enter begin fun gl ->
         let _env = Proofview.Goal.env gl in
         let sigma = Proofview.Goal.sigma gl in
         munify_tac gl sigma true c c'
+      end
+  }
+END
+
+TACTIC EXTEND minstantiate_tac
+| ["minstantiate" uconstr(c) uconstr(c') ] ->
+  { Proofview.Goal.enter begin fun gl ->
+        let sigma = Goal.sigma gl in
+        minstantiate_tac gl sigma c c'
       end
   }
 END
