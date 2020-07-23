@@ -50,14 +50,14 @@ Section Test.
       end
     ).
 
-    (* [munify] fails *)
+    (* [munify] used to fail *)
     IHateLtac B ltac:(fun p q =>
       match goal with
       | |- ?g =>
         let t := constr:(@goal B) in
         let t := eval unfold goal in t in
         is_proj t;
-        assert_fails (munify g (t p q))
+        (munify g (t p q))
       end
     ).
 
@@ -72,11 +72,11 @@ Section Test.
       end
     ).
 
-    (* [munify] fails *)
+    (* [munify] used to fail *)
     IHateLtac B ltac:(fun p q =>
       match goal with
       | |- ?g =>
-        assert_fails (munify g (@goal B p q))
+        munify g (@goal B p q)
       end
     ).
 
