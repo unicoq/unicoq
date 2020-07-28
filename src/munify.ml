@@ -992,7 +992,7 @@ module struct
       (c', l' @ l)
 
   (** {3 "The Function" is split into several} *)
-  let rec unify' ?(conv_t=R.CONV) ?(options=default_options) env t t' (dbg, sigma) =
+  let rec unify'' ?(conv_t=R.CONV) ?(options=default_options) cont env t t' (dbg, sigma) =
     assert (not (isApp sigma (fst t) || isApp sigma (fst t')));
     let (c, l as t) = decompose_evar sigma t in
     let (c', l' as t') = decompose_evar sigma t' in
@@ -1007,12 +1007,15 @@ module struct
               try_run_and_unify env t t' (dbg, sigma)
               ||= try_canonical_structures env t t' sigma
               ||= try_app_fo conv_t env t t' sigma
-              ||= fun dbg -> try_step conv_t env t t' (dbg, sigma)
+              ||= cont conv_t env t t' sigma
             end
         in
         if not (is_success (snd res)) && use_hash () then
           Hashtbl.add tbl (sigma, env, t, t') true;
         res
+
+  and unify' ?(conv_t=R.CONV) ?(options=default_options) =
+    unify'' ~conv_t ~options (fun conv_t env t t' sigma dbg -> try_step conv_t env t t' (dbg, sigma))
 
   and unify_constr ?(conv_t=R.CONV) ?(options=default_options) env t t' (dbg, sigma) =
     unify' ~conv_t ~options env (decompose_app sigma t) (decompose_app sigma t') (dbg,sigma)
@@ -1241,7 +1244,7 @@ module struct
         log_eq env "Rigid-Same" conv_t c c' (dbg, sigma0) &&=
         use_evar_conv env c c')
 
-    | Proj (c1, t1), Proj (c2, t2) when Names.Projection.equal c1 c2 ->
+    | Proj (c1, t1), Proj (c2, t2) when Names.Projection.repr_equal c1 c2 ->
       report (
         log_eq env "Proj-Same" conv_t c c' (dbg, sigma0) &&=
         unify_constr env t1 t2)
@@ -1352,21 +1355,75 @@ module struct
         unify' ~conv_t env (evar_apprec P.flags.open_ts env sigma0 (get_def_app_stack sigma0 env t)) t')
 
     (* Unfolding of projections *)
-    | _ , Proj (p, c) ->
-       report (
-           log_eq_spine env "Proj-DeltaR" conv_t t t' (dbg, sigma0) &&=
-             let c = RO.whd_all env sigma0 c in (* reduce argument *)
-             let (_, args) = destApp sigma0 c in (* expect c to be [hd args] *)
-             let cont = (args.(Projection.npars p + Projection.arg p), l') in
-             unify' ~conv_t env t (evar_apprec P.flags.open_ts env sigma0 cont))
-    | Proj (p, c), _ ->
-       report (
-           log_eq_spine env "Proj-DeltaL" conv_t t t' (dbg, sigma0) &&=
-             let c = RO.whd_all env sigma0 c in (* reduce argument *)
-             let (_, args) = destApp sigma0 c in (* expect c to be [hd args] *)
-             let cont = (args.(Projection.npars p + Projection.arg p), l) in
-             unify' ~conv_t env (evar_apprec P.flags.open_ts env sigma0 cont) t')
-       
+    | _ , Proj (p, c) when reduce_right && stuck != StuckedRight ->
+      begin
+        let c = RO.whd_all env sigma0 c in (* reduce argument *)
+        match
+          let (hd, args) = destApp sigma0 c in
+          (* Assuming [Proj (p, c)] is well-typed, if [hd] is a constructor,
+             it must be of [p]'s record type. *)
+          if isConstruct sigma0 hd then args else raise Constr.DestKO
+        with
+        | args ->
+          (* We have found an application of the constructor belonging
+            to the record of projection [p].
+            (There is no need to check the constructor's index:
+            the types guarantee that it is the first and only one)
+          *)
+          let cont = (args.(Projection.npars p + Projection.arg p), l') in
+          report (
+            log_eq_spine env "Proj-DeltaR" conv_t t t' (dbg, sigma0) &&=
+            unify' ~conv_t env t (evar_apprec P.flags.open_ts env sigma0 cont)
+        )
+        | exception Constr.DestKO ->
+          (* We are stuck on either:
+            a) any term
+            b) any application
+            c) any application of an inductive's constructor
+                which is not the constructor of [p]'s type. *)
+          report (
+            log_eq_spine env "Proj-StuckR" conv_t t t' (dbg, sigma0) &&=
+            try_step ~stuck:StuckedRight conv_t env t (mkProj (p, c), l')
+          )
+      end
+    | Proj (p, c), _ when reduce_left && stuck != StuckedLeft ->
+      begin
+        let c = RO.whd_all env sigma0 c in (* reduce argument *)
+        match
+          let (hd, args) = destApp sigma0 c in
+          (* Assuming [Proj (p, c)] is well-typed, if [hd] is a constructor,
+             it must be of [p]'s record type. *)
+          if isConstruct sigma0 hd then args else raise Constr.DestKO
+        with
+        | args ->
+          (* We have found an application of the constructor belonging
+            to the record of projection [p].
+            (There is no need to check the constructor's index:
+            the types guarantee that it is the first and only one)
+          *)
+          let cont = (args.(Projection.npars p + Projection.arg p), l) in
+          report (
+            log_eq_spine env "Proj-DeltaL" conv_t t t' (dbg, sigma0) &&=
+            unify' ~conv_t env (evar_apprec P.flags.open_ts env sigma0 cont) t'
+        )
+        | exception Constr.DestKO ->
+          (* We are stuck on either:
+            a) any term
+            b) any application
+            c) any application of an inductive's constructor
+                which is not the constructor of [p]'s type. *)
+            report (
+              log_eq_spine env "Proj-StuckL" conv_t t t' (dbg, sigma0) &&=
+              (* We don't know if we made any progress at all so we make sure to
+                 not call [try_step] on the result again by using [unify''] instead of [unify']. *)
+              unify''
+                ~conv_t
+                (fun _ _ _ _  sigma0 dbg -> (dbg, ES.UnifFailure (sigma0, PE.NotSameHead)))
+                env
+                (mkProj (p, c), l)
+                t'
+            )
+      end
     (* Lam-EtaR *)
     | _, Lambda (name, t1, c1) when reduce_right && CList.is_empty l' && not (isLambda sigma0 c) ->
       report (
@@ -1378,7 +1435,8 @@ module struct
         log_eq_spine env "Lam-EtaL" conv_t t t' (dbg, sigma0) &&=
         eta_match conv_t env (name, t1, c1) t')
 
-    | _, _ -> (dbg, ES.UnifFailure (sigma0, PE.NotSameHead))
+    | _, _ ->
+      (dbg, ES.UnifFailure (sigma0, PE.NotSameHead))
 
   and is_stuck env sigma (hd, args) =
     let (hd, args) = evar_apprec P.flags.open_ts env sigma (try_unfolding sigma P.flags.open_ts env hd, args) in
