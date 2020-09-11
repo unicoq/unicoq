@@ -10,7 +10,6 @@ open Names
 open Vars
 open CErrors
 open Recordops
-open Big_int
 
 (* Warning 40 warns about OCaml picking a type for an unknown constructor.  In
    our case, we want OCaml to pick the constructors from Constr.kind_of_term
@@ -155,16 +154,16 @@ let _ = Goptions.declare_bool_option {
 
     We log all the calls to unification and the evar instantiations. *)
 type my_stats = {
-  mutable unif_problems : big_int;
-  mutable instantiations : big_int
+  mutable unif_problems : Int64.t;
+  mutable instantiations : Int64.t
 }
 
-let dstats = { unif_problems = zero_big_int;
-               instantiations = zero_big_int }
+let dstats = { unif_problems = 0L;
+               instantiations = 0L }
 
 type stats = {
-  unif_problems : big_int;
-  instantiations : big_int
+  unif_problems : Int64.t;
+  instantiations : Int64.t
 }
 
 let get_stats () = {
@@ -892,7 +891,7 @@ module Inst = functor (U : Unifier) -> struct
 	    if Termops.occur_meta sigma t' (* || Termops.occur_evar ev t' *) then
 	      (dbg, ES.UnifFailure (sigma0, PE.NotSameHead))
 	    else
-	      (dstats.instantiations <- succ_big_int dstats.instantiations;
+	      (dstats.instantiations <- Int64.succ dstats.instantiations;
 	       (dbg, ES.Success (Evd.define ev t' sigma)))
 	in
 	  Some p
@@ -1016,7 +1015,7 @@ module struct
       match !log with
       | Logger.Node (("Reduce-Same", _), _, true, _) -> false
       | _ -> true in
-    dstats.unif_problems <- succ_big_int dstats.unif_problems;
+    dstats.unif_problems <- Int64.succ dstats.unif_problems;
     if use_hash () then Hashtbl.clear tbl;
     match unify_constr ~conv_t:conv_t env t t' (Logger.init, sigma0) with
     | (log, ES.Success sigma') ->
