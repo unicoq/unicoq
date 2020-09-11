@@ -105,7 +105,7 @@ VERNAC COMMAND EXTEND PrintMunifyStats CLASSIFIED AS SIDEFF
   | [ "Print" "Unicoq" "Stats" ] -> {
       let s = Munify.get_stats () in
       Printf.printf "STATS:\t%s\t\t%s\n"
-        (Big_int.string_of_big_int s.unif_problems)
-        (Big_int.string_of_big_int s.instantiations)
+        (Int64.to_string s.unif_problems)
+        (Int64.to_string s.instantiations)
   }
 END

@@ -3,8 +3,8 @@ module ES = Evarsolve
 type unif = Logger.log * ES.unification_result
 
 type stats = {
-  unif_problems : Big_int.big_int;
-  instantiations : Big_int.big_int
+  unif_problems : Int64.t;
+  instantiations : Int64.t
 }
 
 type unify_fun =

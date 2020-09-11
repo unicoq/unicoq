@@ -1,4 +1,0 @@
-CAMLPKGS = $(if $(filter %.cmxa,$@),,-package num)
-
-merlin-hook::
-	$(HIDE)echo 'PKG num' >> .merlin
