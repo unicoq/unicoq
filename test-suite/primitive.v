@@ -38,7 +38,7 @@ End Test2.
 (* With a field that has a function type *)
 Module Test3.
 
-  Record cs (A : Type) := { ty : Type; #[canonical(false)] f : ty -> Type }.
+  Record cs (A : Type) := { ty : Type; #[canonical=no] f : ty -> Type }.
   Canonical Structure cs_unit {A} : cs A := {| f := fun 'tt => unit |}.
 
   Definition x :=
