@@ -680,15 +680,15 @@ let check_conv_record env sigma (t1,l1) (t2,l2) =
 	match kind sigma t2 with
 	    Prod (_,a,b) -> (* assert (l2=[]); *)
       	      if Termops.dependent sigma (mkRel 1) b then raise Not_found
-	      else lookup_canonical_conversion (proji, Prod_cs),[a;Termops.pop b]
+	      else lookup_canonical_conversion env (proji, Prod_cs),[a;Termops.pop b]
 	  | Sort s ->
-	      lookup_canonical_conversion
+	      lookup_canonical_conversion env
 		(proji, Sort_cs (Sorts.family (ESorts.kind sigma s))),[]
 	  | _ ->
 	      let c2,_ = Termops.global_of_constr sigma t2 in
-		Recordops.lookup_canonical_conversion (proji, Const_cs c2),l2
+		Recordops.lookup_canonical_conversion env (proji, Const_cs c2),l2
       with Not_found ->
-	lookup_canonical_conversion (proji, Default_cs),[]
+	lookup_canonical_conversion env (proji, Default_cs),[]
     in
     let t, { o_DEF = c; o_CTX = ctx; o_INJ=n; o_TABS = bs;
           o_TPARAMS = params; o_NPARAMS = nparams; o_TCOMPS = us } = canon_s in
