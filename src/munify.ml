@@ -21,6 +21,7 @@ module RO = Reductionops
 module R = Reduction
 module EU = Evarutil
 module ES = Evarsolve
+module EC = Evarconv
 module CND = Context.Named.Declaration
 module CRD = Context.Rel.Declaration
 module PE = Pretype_errors
@@ -901,14 +902,9 @@ module Inst = functor (U : Unifier) -> struct
     | None -> (dbg, ES.UnifFailure (sigma0, PE.NotSameHead))
 end
 
-(** forward the use of evar conv *)
-let use_evar_conv env t1 t2 (dbg, sigma) : unif =
-  let open Evarconv in
-  try
-    let sigma = Evarconv.unify_delay env sigma t1 t2 in
-    (dbg, ES.Success sigma)
-  with UnableToUnify (sigma, err) ->
-    (dbg, ES.UnifFailure (sigma, err))
+(** forward the use of evar conv's compare heads *)
+let ev_compare_heads env nparams1 t1 nparams2 t2 (dbg, sigma) : unif =
+  (dbg, EC.compare_heads env sigma nparams1 t1 nparams2 t2)
 
 (** The main module *)
 let rec unif (module P : Params) : (module Unifier) = (
@@ -1086,11 +1082,12 @@ module struct
       ise_list2 (unify_constr env) ts ts1)
 
   and try_app_fo conv_t env (c, l as t) (c', l' as t') sigma dbg =
-    if List.length l = List.length l' then
+    let nparams = List.length l in
+    if nparams = List.length l' then
       begin
         report (
           log_eq_spine env "App-FO" conv_t t t' (dbg, sigma) &&=
-          compare_heads conv_t env c c' &&=
+          compare_heads conv_t env nparams c nparams c' &&=
           ise_list2 (unify_constr env) l l'
         )
       end
@@ -1173,7 +1170,7 @@ module struct
     else
       (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
 
-  and compare_heads conv_t env c c' (dbg, sigma0) =
+  and compare_heads conv_t env nparams c nparams' c' (dbg, sigma0) =
     let rigid_same sigma = report (log_eq env "Rigid-Same" conv_t c c' (dbg, sigma)) in
     match (kind sigma0 c, kind sigma0 c') with
     (* Type-Same *)
@@ -1224,15 +1221,15 @@ module struct
     | Const (c1,_), Const (c2,_) when Constant.equal c1 c2 ->
       report (
         log_eq env "Rigid-Same" conv_t c c' (dbg, sigma0) &&=
-        use_evar_conv env c c')
+        ev_compare_heads env nparams c nparams' c')
     | Ind (c1,_), Ind (c2,_) when Names.eq_ind c1 c2 ->
       report (
         log_eq env "Rigid-Same" conv_t c c' (dbg, sigma0) &&=
-        use_evar_conv env c c')
+        ev_compare_heads env nparams c nparams' c')
     | Construct (c1,_), Construct (c2,_) when Names.eq_constructor c1 c2 ->
       report (
         log_eq env "Rigid-Same" conv_t c c' (dbg, sigma0) &&=
-        use_evar_conv env c c')
+        ev_compare_heads env nparams c nparams' c')
 
     | Proj (c1, t1), Proj (c2, t2) when Names.Projection.repr_equal c1 c2 ->
       report (
