@@ -4,6 +4,7 @@
 COQDOC = "$(COQBIN)coqdoc -interpolate -utf8"
 CAMLP4OPTIONS = "-loc loc"
 CAMLDEBUG = "-g"
+-arg -bt
 src/logger.mli
 src/logger.ml
 src/munify.mli
@@ -16,4 +17,5 @@ test-suite/microtests.v
 test-suite/primitive.v
 test-suite/instantiate.v
 test-suite/timings.v
+test-suite/bug_41.v
 test-suite/bug_44.v
