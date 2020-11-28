@@ -903,8 +903,8 @@ module Inst = functor (U : Unifier) -> struct
 end
 
 (** forward the use of evar conv's compare heads *)
-let ev_compare_heads env nparams1 t1 nparams2 t2 (dbg, sigma) : unif =
-  (dbg, EC.compare_heads env sigma nparams1 t1 nparams2 t2)
+let ev_compare_heads env nparams1 t1 t2 (dbg, sigma) : unif =
+  (dbg, EC.compare_heads env sigma ~nargs:nparams1 t1 t2)
 
 (** The main module *)
 let rec unif (module P : Params) : (module Unifier) = (
@@ -1221,15 +1221,15 @@ module struct
     | Const (c1,_), Const (c2,_) when Constant.equal c1 c2 ->
       report (
         log_eq env "Rigid-Same" conv_t c c' (dbg, sigma0) &&=
-        ev_compare_heads env nparams c nparams' c')
+        ev_compare_heads env nparams c c')
     | Ind (c1,_), Ind (c2,_) when Names.eq_ind c1 c2 ->
       report (
         log_eq env "Rigid-Same" conv_t c c' (dbg, sigma0) &&=
-        ev_compare_heads env nparams c nparams' c')
+        ev_compare_heads env nparams c c')
     | Construct (c1,_), Construct (c2,_) when Names.eq_constructor c1 c2 ->
       report (
         log_eq env "Rigid-Same" conv_t c c' (dbg, sigma0) &&=
-        ev_compare_heads env nparams c nparams' c')
+        ev_compare_heads env nparams c c')
 
     | Proj (c1, t1), Proj (c2, t2) when Names.Projection.repr_equal c1 c2 ->
       report (
