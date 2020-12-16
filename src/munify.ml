@@ -982,11 +982,7 @@ module struct
       (c', l' @ l)
 
   (** {3 "The Function" is split into several} *)
-<<<<<<< HEAD
   let rec unify'' ?(conv_t=R.CONV) ?(options=default_options) cont env t t' (dbg, sigma) =
-=======
-  let rec unify' ?(conv_t=R.CONV) ?(options=default_options) env t t' (dbg, sigma) =
->>>>>>> 024822e... adding options
     assert (not (isApp sigma (fst t) || isApp sigma (fst t')));
     let (c, l as t) = decompose_evar sigma t in
     let (c', l' as t') = decompose_evar sigma t' in
@@ -1008,12 +1004,9 @@ module struct
           Hashtbl.add tbl (sigma, env, t, t') true;
         res
 
-<<<<<<< HEAD
   and unify' ?(conv_t=R.CONV) ?(options=default_options) =
     unify'' ~conv_t ~options (fun conv_t env t t' sigma dbg -> try_step conv_t env t t' (dbg, sigma))
 
-=======
->>>>>>> 024822e... adding options
   and unify_constr ?(conv_t=R.CONV) ?(options=default_options) env t t' (dbg, sigma) =
     unify' ~conv_t ~options env (decompose_app sigma t) (decompose_app sigma t') (dbg,sigma)
 
