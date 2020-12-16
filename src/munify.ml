@@ -910,6 +910,9 @@ let use_evar_conv env t1 t2 (dbg, sigma) : unif =
   with UnableToUnify (sigma, err) ->
     (dbg, ES.UnifFailure (sigma, err))
 
+(** {3 Hashing table of failures} *)
+let tbl = Hashtbl.create 1000
+
 (** The main module *)
 let rec unif (module P : Params) : (module Unifier) = (
 module struct
@@ -929,9 +932,6 @@ module struct
 
   (** If reduction is allowed to happen on the rhs. *)
   let reduce_right = P.wreduce == Right || P.wreduce == Both
-
-  (** {3 Hashing table of failures} *)
-  let tbl = Hashtbl.create 1000
 
   let tblfind t x = try Hashtbl.find t x with Not_found -> false
 
@@ -1016,7 +1016,7 @@ module struct
       | Logger.Node (("Reduce-Same", _), _, true, _) -> false
       | _ -> true in
     dstats.unif_problems <- Int64.succ dstats.unif_problems;
-    Hashtbl.clear tbl;
+    if use_hash () then Hashtbl.clear tbl;
     match unify_constr ~conv_t:conv_t env t t' (Logger.init, sigma0) with
     | (log, ES.Success sigma') ->
       if get_debug () && interesting log then
