@@ -1,3 +1,9 @@
+1.5.1:
+======
+
+  - Removed dependency to `num` library.
+  - Improved performance by avoiding creating and clearing the cache at each run.
+
 1.5:
 ====
 
