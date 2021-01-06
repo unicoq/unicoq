@@ -1242,7 +1242,9 @@ module struct
         ise_array2 (unify_constr env) tys1 tys2 &&=
         ise_array2 (unify_constr (push_rec_types_econstr sigma0 recdef1 env)) bds1 bds2)
 
-    | Case (_, p1, _, c1, cl1), Case (_, p2, _, c2, cl2) ->
+    | Case (ci1, u1, pms1, p1, iv1, c1, cl1), Case (ci2, u2, pms2, p2, iv2, c2, cl2) ->
+      let (ci1, p1, _, c1, cl1) = EConstr.expand_case env sigma0 (ci1, u1, pms1, p1, iv1, c1, cl1) in
+      let (ci2, p2, _, c2, cl2) = EConstr.expand_case env sigma0 (ci2, u2, pms2, p2, iv2, c2, cl2) in
       report (
         log_eq env "Case-Same" conv_t c c' (dbg, sigma0) &&=
         unify_constr env p1 p2 &&=
