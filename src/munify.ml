@@ -9,7 +9,7 @@ open EConstr
 open Names
 open Vars
 open CErrors
-open Recordops
+open Structures
 
 (* Warning 40 warns about OCaml picking a type for an unknown constructor.  In
    our case, we want OCaml to pick the constructors from Constr.kind_of_term
@@ -676,40 +676,30 @@ let check_conv_record env sigma (t1,l1) (t2,l2) =
         let gr1 = GlobRef.ConstRef c1 in
         (gr1, inst), Array.to_list l1
     in
-    let canon_s,l2_effective =
+    let (sigma, solution), l2_effective =
       try
-	match kind sigma t2 with
-	    Prod (_,a,b) -> (* assert (l2=[]); *)
-      	      if Termops.dependent sigma (mkRel 1) b then raise Not_found
-	      else lookup_canonical_conversion env (proji, Prod_cs),[a;Termops.pop b]
-	  | Sort s ->
-	      lookup_canonical_conversion env
-		(proji, Sort_cs (Sorts.family (ESorts.kind sigma s))),[]
-	  | _ ->
-	      let c2,_ = Termops.global_of_constr sigma t2 in
-		Recordops.lookup_canonical_conversion env (proji, Const_cs c2),l2
+        let open ValuePattern in
+        match kind sigma t2 with
+            Prod (_,a,b) -> (* assert (l2=[]); *)
+                    if Termops.dependent sigma (mkRel 1) b then raise Not_found
+              else CanonicalSolution.find env sigma (proji, Prod_cs),[a;Termops.pop b]
+          | Sort s ->
+              CanonicalSolution.find env sigma
+                (proji, Sort_cs (Sorts.family (ESorts.kind sigma s))),[]
+          | _ ->
+              let c2,_ = Termops.global_of_constr sigma t2 in
+              CanonicalSolution.find env sigma (proji, Const_cs c2),l2
       with Not_found ->
-	lookup_canonical_conversion env (proji, Default_cs),[]
+        CanonicalSolution.find env sigma (proji, Default_cs),[]
     in
-    let t, { o_DEF = c; o_CTX = ctx; o_INJ=n; o_TABS = bs;
-          o_TPARAMS = params; o_NPARAMS = nparams; o_TCOMPS = us } = canon_s in
+    let open CanonicalSolution in
     let params1, c1, extra_args1 =
-      match CList.chop nparams l1 with
-	| params1, c1::extra_args1 -> params1, c1, extra_args1
-	| _ -> raise Not_found in
-    let us2,extra_args2 = CList.chop (List.length us) l2_effective in
-    let c = EConstr.of_constr c in
-    let u, ctx' = UnivGen.fresh_instance_from ctx None in
-    let sigma = Evd.merge_context_set (UState.univ_flexible) sigma ctx' in
-    let subst = Univ.make_inverse_instance_subst u in
-    let c' = subst_univs_level_constr subst c in
-    (* let t' = EConstr.of_constr t' in *)
-    (* let t' = subst_univs_level_constr subst t' in *)
-    let bs' = List.map (fun c -> EConstr.to_constr sigma (subst_univs_level_constr subst (EConstr.of_constr c))) bs in
-    let params = List.map (fun c -> EConstr.to_constr sigma (subst_univs_level_constr subst (EConstr.of_constr c))) params in
-    let us = List.map (fun c -> EConstr.to_constr sigma (subst_univs_level_constr subst (EConstr.of_constr c))) us in
-    sigma,c',bs',(params,params1),(us,us2),(extra_args1,extra_args2),c1,
-    (n,applist(t2,l2))
+      match CList.chop solution.nparams l1 with
+      | params1, c1::extra_args1 -> params1, c1, extra_args1
+      | _ -> raise Not_found in
+    let us2,extra_args2 = CList.chop (List.length solution.cvalue_arguments) l2_effective in
+    sigma,solution.constant,solution.abstractions_ty,(solution.params,params1),(solution.cvalue_arguments,us2),(extra_args1,extra_args2),c1,
+    (solution.cvalue_abstraction,applist(t2,l2))
   with Failure _ | Not_found ->
     raise ProjectionNotFound
 
@@ -1072,12 +1062,12 @@ module struct
              let sigma = i in
              let sigma, ev = Evarutil.new_evar env sigma ~src:dloc (substl ks b) in
              (sigma, ev :: ks, m - 1))
-        (evd,[],List.length bs) (List.map of_constr bs)
+        (evd,[],List.length bs) bs
     in
     report (
       log_eq_spine env "CS" R.CONV t t' (dbg, evd') &&=
-      ise_list2 (fun x1 x -> unify_constr env x1 (substl ks x)) params1 (List.map of_constr params) &&=
-      ise_list2 (fun u1 u -> unify_constr env u1 (substl ks u)) us2 (List.map of_constr us) &&=
+      ise_list2 (fun x1 x -> unify_constr env x1 (substl ks x)) params1 params &&=
+      ise_list2 (fun u1 u -> unify_constr env u1 (substl ks u)) us2 us &&=
       unify' env (decompose_app evd' c1) (c,(List.rev ks)) &&=
       ise_list2 (unify_constr env) ts ts1)
 
