@@ -10,7 +10,7 @@ env:
   - NJOBS="2"
   - CONTRIB_NAME="unicoq"
   matrix:
-  - COQ_IMAGE="coqorg/coq:dev"
+  - COQ_IMAGE="coqorg/coq:8.14"
 
 # As described on https://bors.tech/documentation/getting-started/ we need a
 # `staging` and a `trying` branch, both of which need to be CI-enabled.
