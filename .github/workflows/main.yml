@@ -1,0 +1,44 @@
+name: CI
+
+# Controls when the action will run. 
+on:
+  # Triggers the workflow on push or pull request events but only for the master branch
+  push:
+    branches: [ master, master-*, staging, trying ]
+  pull_request:
+    branches: [ master, master-*, staging, trying ]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  build:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+    container:
+      image: coqorg/coq:dev
+      env:
+        OPAMROOT: "/home/coq/.opam"
+        
+    steps:
+    - name: cpu-cores
+      uses: SimenB/github-actions-cpu-cores@v1
+        
+    - name: fix-permissions
+      run: |
+        sudo chown -R coq:coq "$GITHUB_WORKSPACE"
+        
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+    - name: checkout
+      uses: actions/checkout@v2
+      
+    - name: Build UniCoq
+      run: |
+        set -ex
+        eval $(opam env)
+        cd "$GITHUB_WORKSPACE"
+        eval $(opam env)
+        ./configure.sh
+        coq_makefile -f _CoqProject -o Makefile
+        make
