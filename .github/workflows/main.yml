@@ -39,6 +39,5 @@ jobs:
         eval $(opam env)
         cd "$GITHUB_WORKSPACE"
         eval $(opam env)
-        ./configure.sh
         coq_makefile -f _CoqProject -o Makefile
         make
