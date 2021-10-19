@@ -17,7 +17,7 @@ jobs:
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
     container:
-      image: coqorg/coq:dev
+      image: coqorg/coq:8.14
       env:
         OPAMROOT: "/home/coq/.opam"
         
@@ -39,6 +39,5 @@ jobs:
         eval $(opam env)
         cd "$GITHUB_WORKSPACE"
         eval $(opam env)
-        ./configure.sh
         coq_makefile -f _CoqProject -o Makefile
         make
