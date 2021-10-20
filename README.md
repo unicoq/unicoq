@@ -4,8 +4,8 @@
 
 An enhanced unification algorithm for Coq
 
-Copyright (c) 2015--2020
-	Beta Ziliani <bziliani@famaf.unc.edu.ar>,
+Copyright (c) 2015--2021
+	Beta Ziliani <beta@manas.tech>,
     Matthieu Sozeau <mattam@mattam.org>
 
 Distributed under the terms of the MIT License,
