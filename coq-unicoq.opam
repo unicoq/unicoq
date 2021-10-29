@@ -13,7 +13,7 @@ install: [
   [make "install"]
 ]
 depends: [
-  "ocaml" {< "4.08.0"}
+  "ocaml"
   "coq"
 ]
 synopsis: "An enhanced unification algorithm for Coq"
