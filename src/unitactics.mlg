@@ -51,7 +51,7 @@ let munify_tac gl sigma ismatch x y =
   in
   match res with
   | Evarsolve.Success evm -> evars evm
-  | Evarsolve.UnifFailure _ -> Tacticals.New.tclFAIL 0 (str"Unification failed")
+  | Evarsolve.UnifFailure _ -> Tacticals.tclFAIL 0 (str"Unification failed")
 
 
 let minstantiate_tac gl sigma x y =
@@ -66,7 +66,7 @@ let minstantiate_tac gl sigma x y =
   in
   match res with
   | Evarsolve.Success evm -> evars evm
-  | Evarsolve.UnifFailure _ -> Tacticals.New.tclFAIL 0 (str"Unification failed")
+  | Evarsolve.UnifFailure _ -> Tacticals.tclFAIL 0 (str"Unification failed")
 
 }
 
