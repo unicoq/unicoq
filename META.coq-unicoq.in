@@ -1,0 +1,10 @@
+package "plugin" (
+  directory = "src"
+  description = "Unicoq"
+  requires = "coq-core.plugins.ltac"
+  archive(byte) = "unicoq.cma"
+  archive(native) = "unicoq.cmxa"
+  plugin(byte) = "unicoq.cma"
+  plugin(native) = "unicoq.cmxs"
+)
+directory = "."

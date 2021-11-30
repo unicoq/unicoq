@@ -1,6 +1,6 @@
 (library
  (name unicoq)
- (public_name unicoq.plugin)
+ (public_name coq-unicoq.plugin)
  ; Coq default set of warnings
  (flags :standard -w -9-27)
  (libraries coq.plugins.ltac))

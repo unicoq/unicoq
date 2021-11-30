@@ -1,3 +1,4 @@
+META.coq-unicoq.in
 -I src
 -R theories Unicoq
 

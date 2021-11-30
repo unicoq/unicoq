@@ -15,7 +15,7 @@
 (*i camlp4deps: "parsing/grammar.cma" i*)
 (*i camlp4use: "pa_extend.cmo" i*)
 
-DECLARE PLUGIN "unicoq"
+DECLARE PLUGIN "coq-unicoq.plugin"
 
 {
 
