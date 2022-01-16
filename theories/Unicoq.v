@@ -4,6 +4,6 @@
 (*                    Matthieu Sozeau <mattam@mattam.org>.                                      *)
 (************************************************************************************************)
 
-Declare ML Module "coq-unicoq.plugin".
+Declare ML Module "unicoq:coq-unicoq.plugin".
 
 Global Set Use Unicoq.
