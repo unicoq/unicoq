@@ -1,3 +1,4 @@
+-generate-meta-for-package coq-unicoq
 -I src
 -R theories Unicoq
 

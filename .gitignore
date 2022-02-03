@@ -1,4 +1,5 @@
 Makefile
+META.coq-unicoq
 *.bak
 *.cm*
 *.d
