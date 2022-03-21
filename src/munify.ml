@@ -853,13 +853,12 @@ module Inst = functor (U : Unifier) -> struct
 	    let evi2 = Evd.find sigma evk2 in
 	    let evi2env = Evd.evar_env env evi2 in
 	    let ctx2, j = R.dest_arity evi2env (EConstr.to_constr ~abort_on_undefined_evars:false sigma evi2.Evd.evar_concl) in
-	    let ui, uj = Sorts.univ_of_sort i, Sorts.univ_of_sort j in
-	    if i == j || Evd.check_eq sigma ui uj then (* Shortcut, i = j *)
+	    if i == j || Evd.check_eq sigma i j then (* Shortcut, i = j *)
 	      (dbg, ES.Success sigma)
-	    else if Evd.check_leq sigma ui uj then
+	    else if Evd.check_leq sigma i j then
               let t2 = it_mkProd_or_LetIn (mkSort i) (List.map of_rel_decl ctx2) in
 	      (dbg, ES.Success (Evd.downcast evk2 t2 sigma))
-            else if Evd.check_leq sigma uj ui then
+            else if Evd.check_leq sigma j i then
 	      let t1 = it_mkProd_or_LetIn (mkSort j) (List.map of_rel_decl ctx1) in
               (dbg, ES.Success (Evd.downcast ev t1 sigma))
 	    else
@@ -1545,8 +1544,8 @@ module struct
     let nc = EConstr.named_context env in
     let naid = Namegen.next_name_away name (Termops.vars_of_env env) in
     let nc' = CND.of_tuple (Context.make_annot naid Sorts.Relevant, None, a) :: nc in
-    let sigma', univ = Evd.new_univ_variable Evd.univ_flexible sigma in
-    let sigma'',v = Evarutil.new_pure_evar (EConstr.val_of_named_context nc') sigma' (EConstr.mkType univ) in
+    let sigma', univ = Evd.new_sort_variable Evd.univ_flexible sigma in
+    let sigma'',v = Evarutil.new_pure_evar (EConstr.val_of_named_context nc') sigma' (EConstr.mkSort univ) in
     let idsubst = (mkRel 1 :: id_substitution nc) in
     unify_constr ~conv_t:R.CUMUL env ty
       (mkProd (Context.make_annot (Names.Name naid) Sorts.Relevant, a, mkEvar(v, idsubst)))
