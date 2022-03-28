@@ -944,7 +944,7 @@ module struct
         | Some sigma1 ->
           report (log_eq_spine env "Reduce-Same" conv_t sp1 sp2 (dbg, sigma1))
         end
-      with Univ.UniverseInconsistency _ -> (dbg, ES.UnifFailure (sigma0, PE.NotSameHead))
+      with UGraph.UniverseInconsistency _ -> (dbg, ES.UnifFailure (sigma0, PE.NotSameHead))
     else (dbg, ES.UnifFailure (sigma0, PE.NotSameHead))
 
 
@@ -1172,9 +1172,9 @@ module struct
 	      | R.CUMUL -> Evd.set_leq_sort env sigma0 (ESorts.kind sigma0 s1) (ESorts.kind sigma0 s2)
             in
             report (dbg, ES.Success sigma1)
-          with Univ.UniverseInconsistency e ->
+          with UGraph.UniverseInconsistency e ->
 	    debug_str (Printf.sprintf "Type-Same exception: %s"
-		  (Pp.string_of_ppcmds (Univ.explain_universe_inconsistency Univ.Level.pr e))) 0;
+		  (Pp.string_of_ppcmds (UGraph.explain_universe_inconsistency Univ.Level.pr e))) 0;
           report (dbg, ES.UnifFailure (sigma0, PE.NotSameHead))
         end
 
