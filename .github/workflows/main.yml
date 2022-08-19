@@ -16,25 +16,16 @@ jobs:
   build:
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
-    container:
-      image: coqorg/coq:8.16
-      env:
-        OPAMROOT: "/home/coq/.opam"
-        
+    
     steps:    
     # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
     - name: checkout
       uses: actions/checkout@v2
  
-    - name: fix-permissions
-      run: |
-        sudo chown -R coq:coq "$GITHUB_WORKSPACE"
-             
-    - name: Build UniCoq
-      run: |
-        set -ex
-        eval $(opam env)
-        cd "$GITHUB_WORKSPACE"
-        eval $(opam env)
-        coq_makefile -f _CoqProject -o Makefile
-        make
+    - uses: coq-community/docker-coq-action@v1
+    # See https://github.com/coq-community/docker-coq-action#readme
+    # for details on docker-coq-action's syntax and provided features.
+      with:
+        opam_file: 'opam'
+        coq_version: '8.16'
+ 
