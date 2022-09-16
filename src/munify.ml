@@ -186,7 +186,7 @@ let make_evar_instance sigma sign args =
 
 let instantiate_evar sigma sign c args =
   let inst = make_evar_instance sigma sign args in
-  if inst = [] then c else replace_vars inst c
+  if inst = [] then c else replace_vars sigma inst c
 (** Not in 8.5 *)
 
 
