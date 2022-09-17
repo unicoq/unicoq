@@ -508,6 +508,7 @@ let invert map sigma ctx (t : EConstr.t) subs args ev' =
 
       | Evar (ev, evargs) ->
 	begin
+          let evargs = Evd.expand_existential sigma (ev, evargs) in
 	  let f (j : int) (c : EConstr.t) =
             match invert' true c i with
               | Some c' -> c'
@@ -524,7 +525,7 @@ let invert map sigma ctx (t : EConstr.t) subs args ev' =
 		else
 		  raise Exit
 	  in
-	  try return (mkEvar (ev, List.mapi f evargs))
+	  try return (mkLEvar sigma (ev, List.mapi f evargs))
 	  with Exit -> None
 	end
       | _ ->
@@ -590,7 +591,7 @@ let rec prune sigma (ev, plist) =
       let sigma = prune_all m sigma in
       let concl = Evd.evar_concl evi in
       let sigma, ev' = EU.new_pure_evar env_val' sigma concl in
-      Evd.define ev (mkEvar (ev', id_env')) sigma
+      Evd.define ev (mkLEvar sigma (ev', id_env')) sigma
 
 and prune_all map sigma =
   List.fold_left prune sigma (Evar.Map.bindings map)
@@ -727,7 +728,7 @@ let remove_non_var env sigma (ev, subs as evsubs) args =
   if ps = [] then raise CannotPrune
   else
     let sigma' = prune sigma (ev, ps) in
-    (sigma', mkEvar evsubs, args)
+    (sigma', mkLEvar sigma evsubs, args)
 
 let specialize_evar env sigma (ev, subs) args =
   match args with
@@ -827,7 +828,7 @@ module Inst = functor (U : Unifier) -> struct
     let evi = Evd.find_undefined sigma0 ev in
     let nc = Evd.evar_filtered_context evi in
     let res =
-      let subsl = subs in
+      let subsl = Evd.expand_existential sigma0 (ev, subs) in
       invert Evar.Map.empty sigma0 nc t subsl args ev >>= fun (map, t') ->
       fill_lambdas_invert_types map env sigma0 nc t' subsl args ev >>= fun (map, t') ->
       let sigma = prune_all map sigma0 in
@@ -1089,6 +1090,8 @@ module struct
       if k1 = k2 then
         (* Meta-Same *)
         begin
+          let s1 = Evd.expand_existential sigma0 e1 in
+          let s2 = Evd.expand_existential sigma0 e2 in
           let (b,p) = unify_same dbg env sigma0 options k1 (Array.of_list s1) (Array.of_list s2) in
           let dbg, sigma = fst p, match snd p with
             | ES.Success sigma -> sigma
@@ -1106,7 +1109,7 @@ module struct
 	  (* Meta-Meta: we try both directions, but first the one with the
            longest substitution. *)
           let dir1, dir2, var1, var2, term1, term2 =
-            if List.length s1 > List.length s2 then
+            if SList.length s1 > SList.length s2 then
               Original, Swap, (e1, l), (e2, l'), t', t
             else
               Swap, Original, (e2, l'), (e1, l), t, t'
@@ -1429,6 +1432,7 @@ module struct
     in is_unnamed (hd, args)
 
   and meta_inst dir options conv_t env (ev, subs as evsubs, args) (h, args' as t) sigma dbg =
+    let subs = Evd.expand_existential sigma evsubs in
     if must_inst dir ev && is_variable_subs sigma subs && is_variable_args sigma args then
       begin
         try
@@ -1450,7 +1454,8 @@ module struct
     if !options.inst_aggressive && must_inst dir ev then
       begin
         try
-	  let (sigma', evsubs', args'') = remove_non_var env sigma evsubs args in
+          let subs = Evd.expand_existential sigma (ev, subs) in
+	  let (sigma', evsubs', args'') = remove_non_var env sigma (ev, subs) args in
           report (
             log_eq_spine env "Meta-DelDeps" conv_t (mkEvar evsubs, args) t (dbg, sigma') &&=
             switch dir (unify' ~conv_t ~options env) (evsubs', args'') t)
@@ -1548,7 +1553,7 @@ module struct
     let sigma'',v = Evarutil.new_pure_evar (EConstr.val_of_named_context nc') sigma' (EConstr.mkSort univ) in
     let idsubst = (mkRel 1 :: id_substitution nc) in
     unify_constr ~conv_t:R.CUMUL env ty
-      (mkProd (Context.make_annot (Names.Name naid) Sorts.Relevant, a, mkEvar(v, idsubst)))
+      (mkProd (Context.make_annot (Names.Name naid) Sorts.Relevant, a, mkLEvar sigma (v, idsubst)))
       (dbg, sigma'')
 
   and eta_match conv_t ?(options=default_options) env (name, a, t1) (th, tl as t) (dbg, sigma0 ) =
