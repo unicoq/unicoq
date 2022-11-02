@@ -850,10 +850,10 @@ module Inst = functor (U : Unifier) -> struct
             (* ?X : Π Δ. Type i = ?Y : Π Δ'. Type j.
 	       The body of ?X and ?Y just has to be of type Π Δ. Type k for some k <= i, j. *)
 	    let evienv = Evd.evar_env env evi in
-	    let ctx1, i = R.dest_arity evienv (EConstr.to_constr ~abort_on_undefined_evars:false sigma evi.Evd.evar_concl) in
+	    let ctx1, i = R.dest_arity evienv (EConstr.to_constr ~abort_on_undefined_evars:false sigma (Evd.evar_concl evi)) in
 	    let evi2 = Evd.find sigma evk2 in
 	    let evi2env = Evd.evar_env env evi2 in
-	    let ctx2, j = R.dest_arity evi2env (EConstr.to_constr ~abort_on_undefined_evars:false sigma evi2.Evd.evar_concl) in
+	    let ctx2, j = R.dest_arity evi2env (EConstr.to_constr ~abort_on_undefined_evars:false sigma (Evd.evar_concl evi2)) in
 	    if i == j || Evd.check_eq sigma i j then (* Shortcut, i = j *)
 	      (dbg, ES.Success sigma)
 	    else if Evd.check_leq sigma i j then
