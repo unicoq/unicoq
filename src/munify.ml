@@ -854,6 +854,8 @@ module Inst = functor (U : Unifier) -> struct
 	    let evi2 = Evd.find sigma evk2 in
 	    let evi2env = Evd.evar_env env evi2 in
 	    let ctx2, j = R.dest_arity evi2env (EConstr.to_constr ~abort_on_undefined_evars:false sigma (Evd.evar_concl evi2)) in
+	    let i = ESorts.make i in
+	    let j = ESorts.make j in
 	    if i == j || Evd.check_eq sigma i j then (* Shortcut, i = j *)
 	      (dbg, ES.Success sigma)
 	    else if Evd.check_leq sigma i j then
@@ -1171,8 +1173,8 @@ module struct
         begin
           try
 	    let sigma1 = match conv_t with
-              | R.CONV -> Evd.set_eq_sort env sigma0 (ESorts.kind sigma0 s1) (ESorts.kind sigma0 s2)
-	      | R.CUMUL -> Evd.set_leq_sort env sigma0 (ESorts.kind sigma0 s1) (ESorts.kind sigma0 s2)
+              | R.CONV -> Evd.set_eq_sort env sigma0 s1 s2
+	      | R.CUMUL -> Evd.set_leq_sort env sigma0 s1 s2
             in
             report (dbg, ES.Success sigma1)
           with UGraph.UniverseInconsistency e ->
