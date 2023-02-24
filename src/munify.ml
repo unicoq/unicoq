@@ -307,7 +307,7 @@ let log_eq env rule conv_t t1 t2 (l, sigma) =
     let ppcmd_of env (t : EConstr.t) =
       try Printer.pr_econstr_env env sigma t
       (* This is really suspicious as it will hide a serious bug. *)
-      with _ -> Termops.Internal.debug_print_constr t
+      with _ -> Constr.debug_print (EConstr.Unsafe.to_constr t)
     in
     let str1 = Pp.string_of_ppcmds (ppcmd_of env t1) in
     let str2 = Pp.string_of_ppcmds (ppcmd_of env t2) in
