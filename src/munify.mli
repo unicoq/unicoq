@@ -9,7 +9,7 @@ type stats = {
 
 type unify_fun =
   Environ.env -> Evd.evar_map ->
-  Reduction.conv_pb -> EConstr.t -> EConstr.t -> Evarsolve.unification_result
+  Conversion.conv_pb -> EConstr.t -> EConstr.t -> Evarsolve.unification_result
 
 type options = {
     inst_beta_reduce_type : bool;
@@ -37,7 +37,7 @@ val unify_match : Evar.Set.t -> TransparentState.t -> unify_fun
 val unify_match_nored : Evar.Set.t -> TransparentState.t -> unify_fun
 
 (** Instantiates an evar `?x[subst] args` with a term `t` *)
-val instantiate : ?conv_t:Reduction.conv_pb ->
+val instantiate : ?conv_t:Conversion.conv_pb ->
                   ?options: options ref ->
                   Environ.env ->
                   EConstr.t Constr.pexistential * EConstr.t list ->
