@@ -18,6 +18,7 @@ open Structures
 [@@@ocaml.warning "-40"]
 
 module RO = Reductionops
+module C = Conversion
 module R = Reduction
 module EU = Evarutil
 module ES = Evarsolve
@@ -334,14 +335,14 @@ let debug_str s _l =
 let debug_eq env sigma t c1 c2 _l =
   let s1 = string_of_ppcmds (Printer.pr_econstr_env env sigma (applist c1)) in
   let s2 = string_of_ppcmds (Printer.pr_econstr_env env sigma (applist c2)) in
-  Printf.printf "%s %s %s\n" s1 (if t == R.CONV then "=?=" else "<?=") s2;
+  Printf.printf "%s %s %s\n" s1 (if t == C.CONV then "=?=" else "<?=") s2;
   flush_all ()
 
 let print_eq f (conv_t, c1, c2) =
   output_string f "\\lstinline{";
   output_string f c1;
   output_string f "}~\\approx_{";
-  output_string f (if conv_t == R.CONV then "=" else "\\leq");
+  output_string f (if conv_t == C.CONV then "=" else "\\leq");
   output_string f "}~\\lstinline{";
   output_string f c2;
   output_string f "}"
@@ -779,18 +780,18 @@ end
 
 type unify_fun =
   Environ.env -> Evd.evar_map ->
-  Reduction.conv_pb -> EConstr.t -> EConstr.t -> Evarsolve.unification_result
+  Conversion.conv_pb -> EConstr.t -> EConstr.t -> Evarsolve.unification_result
 
 (** The main module type of unification, containing the functions that can be exported *)
 module type Unifier = sig
   val unify_evar_conv : unify_fun
 
-  val unify_constr : ?conv_t:R.conv_pb ->
+  val unify_constr : ?conv_t:C.conv_pb ->
                      ?options:options ref ->
                      Environ.env ->
                      EConstr.t -> EConstr.t -> Logger.log * Evd.evar_map -> unif
 
-  val instantiate : R.conv_pb ->
+  val instantiate : C.conv_pb ->
            options ref ->
            Environ.env ->
            EConstr.t Constr.pexistential * EConstr.t list ->
@@ -842,7 +843,7 @@ module Inst = functor (U : Unifier) -> struct
       let sigma = prune_all map sigma0 in
       let sigma, t' =
 	Evarsolve.refresh_universes
-	    (if conv_t == R.CUMUL && isArity sigma t' then
+            (if conv_t == C.CUMUL && isArity sigma t' then
 	      (* ?X <= Type(i) -> X := Type j, j <= i *)
 	      (* Type(i) <= X -> X := Type j, i <= j *)
 	      Some (dir == Original)
@@ -882,7 +883,7 @@ module Inst = functor (U : Unifier) -> struct
 	  with R.NotArity ->
             if !options.inst_unify_types then begin
                 let ty' = Retyping.get_type_of env sigma t'' in
-                U.unify_constr ~conv_t:R.CUMUL env ty' ty (dbg, sigma)
+                U.unify_constr ~conv_t:C.CUMUL env ty' ty (dbg, sigma)
               end
             else
               (dbg, ES.Success sigma)
@@ -934,7 +935,7 @@ module struct
   let try_hash env sp1 sp2 (dbg, sigma as dsigma) =
     if use_hash () && tblfind tbl (sigma, env, sp1, sp2) then
       begin
-        log_eq_spine env "Hash-Hit" R.CONV sp1 sp2 dsigma &&= fun (dbg, sigma) ->
+        log_eq_spine env "Hash-Hit" C.CONV sp1 sp2 dsigma &&= fun (dbg, sigma) ->
           report (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
       (* TODO Something is funky here: it returns error on a success
          and the other way around?? *)
@@ -978,7 +979,7 @@ module struct
       (c', l' @ l)
 
   (** {3 "The Function" is split into several} *)
-  let rec unify'' ?(conv_t=R.CONV) ?(options=default_options) cont env t t' (dbg, sigma) =
+  let rec unify'' ?(conv_t=C.CONV) ?(options=default_options) cont env t t' (dbg, sigma) =
     assert (not (isApp sigma (fst t) || isApp sigma (fst t')));
     let (c, l as t) = decompose_evar sigma t in
     let (c', l' as t') = decompose_evar sigma t' in
@@ -1000,10 +1001,10 @@ module struct
           Hashtbl.add tbl (sigma, env, t, t') true;
         res
 
-  and unify' ?(conv_t=R.CONV) ?(options=default_options) =
+  and unify' ?(conv_t=C.CONV) ?(options=default_options) =
     unify'' ~conv_t ~options (fun conv_t env t t' sigma dbg -> try_step conv_t env t t' (dbg, sigma))
 
-  and unify_constr ?(conv_t=R.CONV) ?(options=default_options) env t t' (dbg, sigma) =
+  and unify_constr ?(conv_t=C.CONV) ?(options=default_options) env t t' (dbg, sigma) =
     unify' ~conv_t ~options env (decompose_app sigma t) (decompose_app sigma t') (dbg,sigma)
 
   and unify_evar_conv env sigma0 conv_t t t' =
@@ -1045,7 +1046,7 @@ module struct
 
   and run_and_unify dbg env sigma0 args ty =
     let a, f, v = List.nth args 0, List.nth args 1, List.nth args 2 in
-    unify' ~conv_t:R.CUMUL env (decompose_app sigma0 a) ty (dbg, sigma0) &&= fun (dbg, sigma1) ->
+    unify' ~conv_t:C.CUMUL env (decompose_app sigma0 a) ty (dbg, sigma0) &&= fun (dbg, sigma1) ->
       match !run_function env sigma1 f with
       | Some (sigma2, v') -> unify' env (decompose_app sigma2 v) (decompose_app sigma2 v') (dbg, sigma2)
       | _ -> (dbg, ES.UnifFailure (sigma1, PE.NotSameHead))
@@ -1075,7 +1076,7 @@ module struct
         (evd,[],List.length bs) bs
     in
     report (
-      log_eq_spine env "CS" R.CONV t t' (dbg, evd') &&=
+      log_eq_spine env "CS" C.CONV t t' (dbg, evd') &&=
       ise_list2 (fun x1 x -> unify_constr env x1 (substl ks x)) params1 params &&=
       ise_list2 (fun u1 u -> unify_constr env u1 (substl ks u)) us2 us &&=
       unify' env (decompose_app evd' c1) (c,(List.rev ks)) &&=
@@ -1157,13 +1158,13 @@ module struct
         (* TODO: Why the [] here!! *)
         let t = ES.solve_pattern_eqn env sigma [] (applist t) in
         let pbty = match conv_t with
-	    R.CONV -> None
-          | R.CUMUL -> Some (dir == Original)
+            C.CONV -> None
+          | C.CUMUL -> Some (dir == Original)
         in
         match ES.solve_simple_eqn (fun _flags _k -> unify_evar_conv) P.flags env sigma (pbty, evsubs, t) with
           ES.Success sigma' ->
           Printf.printf "%s" "solve_simple_eqn solved it: ";
-	  debug_eq env sigma R.CONV (mkEvar evsubs, []) (decompose_app sigma t) 0;
+          debug_eq env sigma C.CONV (mkEvar evsubs, []) (decompose_app sigma t) 0;
 	  (dbg, ES.Success sigma')
 	| e -> (dbg, e)
       with _ ->
@@ -1181,8 +1182,8 @@ module struct
         begin
           try
 	    let sigma1 = match conv_t with
-              | R.CONV -> Evd.set_eq_sort env sigma0 s1 s2
-	      | R.CUMUL -> Evd.set_leq_sort env sigma0 s1 s2
+              | C.CONV -> Evd.set_eq_sort env sigma0 s1 s2
+              | C.CUMUL -> Evd.set_leq_sort env sigma0 s1 s2
             in
             report (dbg, ES.Success sigma1)
           with UGraph.UniverseInconsistency e ->
@@ -1562,7 +1563,7 @@ module struct
     let sigma', univ = Evd.new_sort_variable Evd.univ_flexible sigma in
     let sigma'',v = Evarutil.new_pure_evar (EConstr.val_of_named_context nc') sigma' (EConstr.mkSort univ) in
     let idsubst = (mkRel 1 :: id_substitution nc) in
-    unify_constr ~conv_t:R.CUMUL env ty
+    unify_constr ~conv_t:C.CUMUL env ty
       (mkProd (Context.make_annot (Names.Name naid) Sorts.Relevant, a, mkLEvar sigma (v, idsubst)))
       (dbg, sigma'')
 
@@ -1630,7 +1631,7 @@ let unify_match_nored evars ts =
   let module M = (val unif (module P)) in
   M.unify_evar_conv
 
-let instantiate ?(conv_t=R.CONV) ?(options=default_options) env
+let instantiate ?(conv_t=C.CONV) ?(options=default_options) env
       (_, _ as evsubs) t sigma =
   let module P = (struct
     let flags = Evarconv.default_flags_of TransparentState.full

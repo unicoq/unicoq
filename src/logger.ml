@@ -3,7 +3,7 @@ type 'a nlog =
   Initial
   | Node of 'a * 'a nlog ref * bool * ('a nlog ref) list
 
-type log_elem = string * (Reduction.conv_pb * string * string)
+type log_elem = string * (Conversion.conv_pb * string * string)
 
 type log = log_elem nlog ref
 
@@ -42,7 +42,7 @@ let rec depth l =
   | Node (_, p, _, _) -> depth p + 1
 
 let print_node (s, (conv_t, c1, c2)) =
-  let conv = if conv_t = Reduction.CONV then "=?=" else "=<=" in
+  let conv = if conv_t = Conversion.CONV then "=?=" else "=<=" in
   Printf.printf "%s %s %s (%s)" c1 conv c2 s;
   flush stdout
 

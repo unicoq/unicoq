@@ -45,9 +45,9 @@ let munify_tac gl sigma ismatch x y =
     let ts = Conv_oracle.get_transp_state (Environ.oracle env) in
     if ismatch then
       let evars = Evd.fold (fun e _->Evar.Set.add e) sigma Evar.Set.empty in
-      unify_match evars ts env sigma Reduction.CONV x y
+      unify_match evars ts env sigma Conversion.CONV x y
     else
-      unify_evar_conv ts env sigma Reduction.CUMUL x y
+      unify_evar_conv ts env sigma Conversion.CUMUL x y
   in
   match res with
   | Evarsolve.Success evm -> evars evm
@@ -62,7 +62,7 @@ let minstantiate_tac gl sigma x y =
   let options = current_options () in
   let options = ref { options with inst_unify_types = false } in 
   let res =
-    instantiate ~conv_t:Reduction.CUMUL ~options env (EConstr.destEvar sigma x, []) y sigma
+    instantiate ~conv_t:Conversion.CUMUL ~options env (EConstr.destEvar sigma x, []) y sigma
   in
   match res with
   | Evarsolve.Success evm -> evars evm
