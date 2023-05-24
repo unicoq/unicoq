@@ -451,7 +451,7 @@ let get_definition sigma env t : EConstr.t =
     unfolds c and returns the new head term d applied to the concatenation
     of arguments. *)
 let get_def_app_stack sigma env (c, args) =
-  let (d, dargs) = decompose_app sigma (get_definition sigma env c) in
+  let (d, dargs) = decompose_app_list sigma (get_definition sigma env c) in
   (d, dargs @ args)
 
 let try_unfolding sigma ts env t =
@@ -722,7 +722,7 @@ let evar_apprec ts env sigma (c, stack) =
       aux (Evd.existential_value sigma (evk,eva), stack)
     | _ ->
       match RO.Stack.list_of_app_stack stack with
-      | None -> decompose_app sigma (RO.Stack.zip sigma (t, stack))
+      | None -> decompose_app_list sigma (RO.Stack.zip sigma (t, stack))
       | Some stack -> (t, stack)
   in aux (c, RO.Stack.append_app_list stack RO.Stack.empty)
 
@@ -971,7 +971,7 @@ module struct
       an evar, returning the new head and list of arguments.
   *)
   let rec decompose_evar sigma (c, l) =
-    let (c', l') = decompose_app sigma c in
+    let (c', l') = decompose_app_list sigma c in
     if isCast sigma c' then
       let (t, _, _) = destCast sigma c' in
       decompose_evar sigma (t, l' @ l)
@@ -1005,7 +1005,7 @@ module struct
     unify'' ~conv_t ~options (fun conv_t env t t' sigma dbg -> try_step conv_t env t t' (dbg, sigma))
 
   and unify_constr ?(conv_t=C.CONV) ?(options=default_options) env t t' (dbg, sigma) =
-    unify' ~conv_t ~options env (decompose_app sigma t) (decompose_app sigma t') (dbg,sigma)
+    unify' ~conv_t ~options env (decompose_app_list sigma t) (decompose_app_list sigma t') (dbg,sigma)
 
   and unify_evar_conv env sigma0 conv_t t t' =
     let interesting log = (* if it's not just Reduce-Same *)
@@ -1046,9 +1046,9 @@ module struct
 
   and run_and_unify dbg env sigma0 args ty =
     let a, f, v = List.nth args 0, List.nth args 1, List.nth args 2 in
-    unify' ~conv_t:C.CUMUL env (decompose_app sigma0 a) ty (dbg, sigma0) &&= fun (dbg, sigma1) ->
+    unify' ~conv_t:C.CUMUL env (decompose_app_list sigma0 a) ty (dbg, sigma0) &&= fun (dbg, sigma1) ->
       match !run_function env sigma1 f with
-      | Some (sigma2, v') -> unify' env (decompose_app sigma2 v) (decompose_app sigma2 v') (dbg, sigma2)
+      | Some (sigma2, v') -> unify' env (decompose_app_list sigma2 v) (decompose_app_list sigma2 v') (dbg, sigma2)
       | _ -> (dbg, ES.UnifFailure (sigma1, PE.NotSameHead))
 
   and try_canonical_structures env (c, _ as t) (c', _ as t') sigma dbg =
@@ -1079,7 +1079,7 @@ module struct
       log_eq_spine env "CS" C.CONV t t' (dbg, evd') &&=
       ise_list2 (fun x1 x -> unify_constr env x1 (substl ks x)) params1 params &&=
       ise_list2 (fun u1 u -> unify_constr env u1 (substl ks u)) us2 us &&=
-      unify' env (decompose_app evd' c1) (c,(List.rev ks)) &&=
+      unify' env (decompose_app_list evd' c1) (c,(List.rev ks)) &&=
       ise_list2 (unify_constr env) ts ts1)
 
   and try_app_fo conv_t env (c, l as t) (c', l' as t') sigma dbg =
@@ -1164,7 +1164,7 @@ module struct
         match ES.solve_simple_eqn (fun _flags _k -> unify_evar_conv) P.flags env sigma (pbty, evsubs, t) with
           ES.Success sigma' ->
           Printf.printf "%s" "solve_simple_eqn solved it: ";
-          debug_eq env sigma C.CONV (mkEvar evsubs, []) (decompose_app sigma t) 0;
+          debug_eq env sigma C.CONV (mkEvar evsubs, []) (decompose_app_list sigma t) 0;
 	  (dbg, ES.Success sigma')
 	| e -> (dbg, e)
       with _ ->
@@ -1271,14 +1271,14 @@ module struct
     match (kind sigma0 c, kind sigma0 c') with
     (* Lam-BetaR *)
     | _, Lambda (_, _, trm) when reduce_right && not (CList.is_empty l') ->
-      let (c2, l2) = decompose_app sigma0 (subst1 (List.hd l') trm) in
+      let (c2, l2) = decompose_app_list sigma0 (subst1 (List.hd l') trm) in
       let t2 = (c2, l2 @ List.tl l') in
       report (
         log_eq_spine env "Lam-BetaR" conv_t t t' (dbg, sigma0) &&=
         unify' ~conv_t env t t2)
 
     | _, LetIn (_, trm, _, body) when reduce_right ->
-      let (c2, l2) = decompose_app sigma0 (subst1 trm body) in
+      let (c2, l2) = decompose_app_list sigma0 (subst1 trm body) in
       let t2 = (c2, l2 @ l') in
       report (
         log_eq_spine env "Let-ZetaR" conv_t t t' (dbg, sigma0) &&=
@@ -1297,14 +1297,14 @@ module struct
 
     (* Lam-BetaL *)
     | Lambda (_, _, trm), _ when reduce_left && not (CList.is_empty l) ->
-      let (c1, l1) = decompose_app sigma0 (subst1 (List.hd l) trm) in
+      let (c1, l1) = decompose_app_list sigma0 (subst1 (List.hd l) trm) in
       let t1 = (c1, l1 @ List.tl l) in
       report (
         log_eq_spine env "Lam-BetaL" conv_t t t' (dbg, sigma0) &&=
         unify' ~conv_t env t1 t')
     (* Let-ZetaL *)
     | LetIn (_, trm, _, body), _ when reduce_left ->
-      let (c1, l1) = decompose_app sigma0 (subst1 trm body) in
+      let (c1, l1) = decompose_app_list sigma0 (subst1 trm body) in
       let t1 = (c1, l1 @ l) in
       report (
         log_eq_spine env "Let-ZetaL" conv_t t t' (dbg, sigma0) &&=
@@ -1640,7 +1640,7 @@ let instantiate ?(conv_t=C.CONV) ?(options=default_options) env
     let match_evars = None
   end : Params) in
   let module M = (val unif (module P)) in
-  M.instantiate conv_t options env evsubs (decompose_app sigma t) sigma
+  M.instantiate conv_t options env evsubs (decompose_app_list sigma t) sigma
 
 let use_munify () = !munify_on
 let set_use_munify b =
