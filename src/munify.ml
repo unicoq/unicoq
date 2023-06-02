@@ -45,7 +45,7 @@ let set_debug b =
 let get_debug () = !debug
 
 let _ = Goptions.declare_bool_option {
-  Goptions.optdepr  = false;
+  Goptions.optdepr  = None;
   Goptions.optstage = Interp;
   Goptions.optkey   = ["Unicoq";"Debug"];
   Goptions.optread  = get_debug;
@@ -54,7 +54,7 @@ let _ = Goptions.declare_bool_option {
 
 let trace = ref false
 let _ = Goptions.declare_bool_option {
-  Goptions.optdepr  = false;
+  Goptions.optdepr  = None;
   Goptions.optstage = Interp;
   Goptions.optkey   = ["Unicoq";"Trace"];
   Goptions.optread  = (fun () -> !trace);
@@ -63,7 +63,7 @@ let _ = Goptions.declare_bool_option {
 
 let dump = ref false
 let _ = Goptions.declare_bool_option {
-  Goptions.optdepr  = false;
+  Goptions.optdepr  = None;
   Goptions.optstage = Interp;
   Goptions.optkey   = ["Unicoq";"Dump";"Equalities"];
   Goptions.optread  = (fun () -> !dump);
@@ -72,7 +72,7 @@ let _ = Goptions.declare_bool_option {
 
 let latex_file = ref ""
 let _ = Goptions.declare_string_option {
-  Goptions.optdepr = false;
+  Goptions.optdepr = None;
   Goptions.optstage = Interp;
   Goptions.optkey = ["Unicoq";"LaTex";"File"];
   Goptions.optread = (fun () -> !latex_file);
@@ -116,7 +116,7 @@ let set_super_aggressive b =
       {!default_options with inst_super_aggressive = b}
 
 let _ = Goptions.declare_bool_option {
-  Goptions.optdepr = false;
+  Goptions.optdepr = None;
   Goptions.optstage = Interp;
   Goptions.optkey = ["Unicoq"; "Aggressive"];
   Goptions.optread = is_aggressive;
@@ -124,7 +124,7 @@ let _ = Goptions.declare_bool_option {
 }
 
 let _ = Goptions.declare_bool_option {
-  Goptions.optdepr = false;
+  Goptions.optdepr = None;
   Goptions.optstage = Interp;
   Goptions.optkey = ["Unicoq"; "Super"; "Aggressive"];
   Goptions.optread = is_super_aggressive;
@@ -138,7 +138,7 @@ let set_solving_eqn b =
     {!default_options with inst_try_solving_eqn = b}
 
 let _ = Goptions.declare_bool_option {
-  Goptions.optdepr  = false;
+  Goptions.optdepr  = None;
   Goptions.optstage = Interp;
   Goptions.optkey   = ["Unicoq"; "Try"; "Solving";"Eqn"];
   Goptions.optread  = get_solving_eqn;
@@ -152,7 +152,7 @@ let set_hash b =
     {!default_options with use_hash = b}
 
 let _ = Goptions.declare_bool_option {
-  Goptions.optdepr = false;
+  Goptions.optdepr = None;
   Goptions.optstage = Interp;
   Goptions.optkey = ["Unicoq"; "Use";"Hash"];
   Goptions.optread = use_hash;
@@ -1648,7 +1648,7 @@ let set_use_munify b =
   munify_on := b
 
 let _ = Goptions.declare_bool_option {
-  Goptions.optdepr = false;
+  Goptions.optdepr = None;
   Goptions.optstage = Interp;
   Goptions.optkey = ["Use";"Unicoq"];
   Goptions.optread = use_munify;
