@@ -679,7 +679,7 @@ let check_conv_record env sigma (t1,l1) (t2,l2) =
     let (proji,_inst), l1 = try
         Termops.global_of_constr sigma t1, l1
       with Not_found ->
-        let t1, r1 = try destProj sigma t1 with Constr.DestKO -> raise Not_found in
+        let t1, _, r1 = try destProj sigma t1 with Constr.DestKO -> raise Not_found in
         let app = Retyping.expand_projection env sigma t1 r1 l1 in
         let t1, l1 = destApp sigma app in
         let c1, inst = destConst sigma t1 in
@@ -1187,8 +1187,10 @@ module struct
             in
             report (dbg, ES.Success sigma1)
           with UGraph.UniverseInconsistency e ->
+            let prq = Termops.pr_evd_qvar sigma0
+            and prl = Termops.pr_evd_level sigma0 in
 	    debug_str (Printf.sprintf "Type-Same exception: %s"
-		  (Pp.string_of_ppcmds (UGraph.explain_universe_inconsistency Univ.Level.pr e))) 0;
+                  (Pp.string_of_ppcmds (UGraph.explain_universe_inconsistency prq prl e))) 0;
           report (dbg, ES.UnifFailure (sigma0, PE.NotSameHead))
         end
 
@@ -1234,7 +1236,7 @@ module struct
         log_eq env "Rigid-Same" conv_t c c' (dbg, sigma0) &&=
         ev_compare_heads env nparams c c')
 
-    | Proj (c1, t1), Proj (c2, t2) when Names.Projection.repr_equal c1 c2 ->
+    | Proj (c1, _, t1), Proj (c2, _, t2) when Names.Projection.repr_equal c1 c2 ->
       report (
         log_eq env "Proj-Same" conv_t c c' (dbg, sigma0) &&=
         unify_constr env t1 t2)
@@ -1347,7 +1349,7 @@ module struct
         unify' ~conv_t env (evar_apprec P.flags.open_ts env sigma0 (get_def_app_stack sigma0 env t)) t')
 
     (* Unfolding of projections *)
-    | _ , Proj (p, c) when reduce_right && stuck != StuckedRight ->
+    | _ , Proj (p, r, c) when reduce_right && stuck != StuckedRight ->
       begin
         let c = RO.whd_all env sigma0 c in (* reduce argument *)
         match
@@ -1375,10 +1377,10 @@ module struct
                 which is not the constructor of [p]'s type. *)
           report (
             log_eq_spine env "Proj-StuckR" conv_t t t' (dbg, sigma0) &&=
-            try_step ~stuck:StuckedRight conv_t env t (mkProj (p, c), l')
+            try_step ~stuck:StuckedRight conv_t env t (mkProj (p, r, c), l')
           )
       end
-    | Proj (p, c), _ when reduce_left && stuck != StuckedLeft ->
+    | Proj (p, r, c), _ when reduce_left && stuck != StuckedLeft ->
       begin
         let c = RO.whd_all env sigma0 c in (* reduce argument *)
         match
@@ -1412,7 +1414,7 @@ module struct
                 ~conv_t
                 (fun _ _ _ _  sigma0 dbg -> (dbg, ES.UnifFailure (sigma0, PE.NotSameHead)))
                 env
-                (mkProj (p, c), l)
+                (mkProj (p, r, c), l)
                 t'
             )
       end
@@ -1438,7 +1440,7 @@ module struct
       | Evar _ -> false (* immediate solution without Canon Struct *)
       | Lambda _ -> assert(args = []); true
       | LetIn (_, b, _, c) -> is_unnamed (evar_apprec P.flags.open_ts env sigma (subst1 b c, args))
-      | Proj (p, c) -> false
+      | Proj _ -> false
       | App _| Cast _ -> assert false
     in is_unnamed (hd, args)
 
