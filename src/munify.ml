@@ -1225,11 +1225,11 @@ module struct
       report (
         log_eq env "Rigid-Same" conv_t c c' (dbg, sigma0) &&=
         ev_compare_heads env nparams c c')
-    | Ind (c1,_), Ind (c2,_) when Names.eq_ind c1 c2 ->
+    | Ind (c1,_), Ind (c2,_) when Names.Ind.CanOrd.equal c1 c2 ->
       report (
         log_eq env "Rigid-Same" conv_t c c' (dbg, sigma0) &&=
         ev_compare_heads env nparams c c')
-    | Construct (c1,_), Construct (c2,_) when Names.eq_constructor c1 c2 ->
+    | Construct (c1,_), Construct (c2,_) when Names.Construct.CanOrd.equal c1 c2 ->
       report (
         log_eq env "Rigid-Same" conv_t c c' (dbg, sigma0) &&=
         ev_compare_heads env nparams c c')
