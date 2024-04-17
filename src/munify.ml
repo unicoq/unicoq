@@ -559,7 +559,7 @@ let some_or_prop o =
 (** Removes the positions in the list, and all dependent elements. *)
 let remove sigma l pos =
   let l = List.rev l in
-  let rec remove' i (l: (Evd.econstr, Evd.etypes) CND.pt list) vs =
+  let rec remove' i (l: named_declaration list) vs =
     match l with
       | [] -> []
       | (d :: s) ->
@@ -650,7 +650,7 @@ let fill_lambdas_invert_types map env sigma nc body subst args ev =
     invert map sigma nc ty subst ars ev >>= fun (m, ty) ->
     rmap := m;
     let n = Namegen.named_hd env sigma ty Anonymous in
-    return (ars, mkLambda (Context.make_annot n Sorts.Relevant, ty, bdy))) args (return (args, body))
+    return (ars, mkLambda (Context.make_annot n ERelevance.relevant, ty, bdy))) args (return (args, body))
   >>= fun (_, bdy) -> return (!rmap, bdy)
 
 exception ProjectionNotFound
@@ -1267,7 +1267,7 @@ module struct
       (dbg, ES.UnifFailure (sigma0, PE.NotSameHead))
 
   and push_rec_types_econstr sigma (a, l, m) env =
-    Environ.push_rec_types (a, Array.map (to_constr ~abort_on_undefined_evars:false sigma) l, Array.map (to_constr ~abort_on_undefined_evars:false sigma) m) env
+    Environ.push_rec_types (Array.map (to_binder_annot sigma) a, Array.map (to_constr ~abort_on_undefined_evars:false sigma) l, Array.map (to_constr ~abort_on_undefined_evars:false sigma) m) env
 
   and try_step ?(stuck=NotStucked) conv_t env (c, l as t) (c', l' as t') (dbg, sigma0) =
     match (kind sigma0 c, kind sigma0 c') with
@@ -1561,12 +1561,12 @@ module struct
   and check_product dbg env sigma ty (name, a) =
     let nc = EConstr.named_context env in
     let naid = Namegen.next_name_away name (Termops.vars_of_env env) in
-    let nc' = CND.of_tuple (Context.make_annot naid Sorts.Relevant, None, a) :: nc in
+    let nc' = CND.of_tuple (Context.make_annot naid ERelevance.relevant, None, a) :: nc in
     let sigma', univ = Evd.new_sort_variable Evd.univ_flexible sigma in
     let sigma'',v = Evarutil.new_pure_evar (EConstr.val_of_named_context nc') sigma' (EConstr.mkSort univ) in
     let idsubst = (mkRel 1 :: id_substitution nc) in
     unify_constr ~conv_t:C.CUMUL env ty
-      (mkProd (Context.make_annot (Names.Name naid) Sorts.Relevant, a, mkLEvar sigma (v, idsubst)))
+      (mkProd (Context.make_annot (Names.Name naid) ERelevance.relevant, a, mkLEvar sigma (v, idsubst)))
       (dbg, sigma'')
 
   and eta_match conv_t ?(options=default_options) env (name, a, t1) (th, tl as t) (dbg, sigma0 ) =
