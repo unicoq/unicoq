@@ -27,5 +27,5 @@ jobs:
     # for details on docker-coq-action's syntax and provided features.
       with:
         opam_file: 'opam'
-        coq_version: 'dev'
+        coq_version: '8.19'
  
