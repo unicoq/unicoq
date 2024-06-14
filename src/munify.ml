@@ -1435,7 +1435,7 @@ module struct
   and is_stuck env sigma (hd, args) =
     let (hd, args) = evar_apprec P.flags.open_ts env sigma (try_unfolding sigma P.flags.open_ts env hd, args) in
     let rec is_unnamed (hd, args) = match kind sigma hd with
-      | (Var _|Construct _|Ind _|Const _|Prod _|Sort _|Int _|Float _|Array _) -> false
+      | (Var _|Construct _|Ind _|Const _|Prod _|Sort _|Int _|Float _|String _|Array _) -> false
       | (Case _|Fix _|CoFix _|Meta _|Rel _)-> true
       | Evar _ -> false (* immediate solution without Canon Struct *)
       | Lambda _ -> assert(args = []); true
