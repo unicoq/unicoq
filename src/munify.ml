@@ -1566,7 +1566,7 @@ module struct
     let sigma'',v = Evarutil.new_pure_evar (EConstr.val_of_named_context nc') sigma' (EConstr.mkSort univ) in
     let idsubst = (mkRel 1 :: id_substitution nc) in
     unify_constr ~conv_t:C.CUMUL env ty
-      (mkProd (Context.make_annot (Names.Name naid) ERelevance.relevant, a, mkLEvar sigma (v, idsubst)))
+      (mkProd (Context.make_annot (Names.Name naid) ERelevance.relevant, a, mkLEvar sigma'' (v, idsubst)))
       (dbg, sigma'')
 
   and eta_match conv_t ?(options=default_options) env (name, a, t1) (th, tl as t) (dbg, sigma0 ) =
