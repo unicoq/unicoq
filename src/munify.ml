@@ -877,7 +877,7 @@ module Inst = functor (U : Unifier) -> struct
               let sigma, k = Evd.new_sort_variable Evd.univ_flexible_alg sigma in
 	      let t1 = it_mkProd_or_LetIn (mkSort k) (List.map of_rel_decl ctx1) in
 	      let t2 = it_mkProd_or_LetIn (mkSort k) (List.map of_rel_decl ctx2) in
-	      let sigma = Evd.set_leq_sort env (Evd.set_leq_sort env sigma k i) k j in
+              let sigma = Evd.set_leq_sort (Evd.set_leq_sort sigma k i) k j in
 	      (dbg, ES.Success (Evd.downcast evk2 t2 (Evd.downcast ev t1 sigma)))
 	  | _ -> raise R.NotArity
 	  with R.NotArity ->
@@ -1182,8 +1182,8 @@ module struct
         begin
           try
 	    let sigma1 = match conv_t with
-              | C.CONV -> Evd.set_eq_sort env sigma0 s1 s2
-              | C.CUMUL -> Evd.set_leq_sort env sigma0 s1 s2
+              | C.CONV -> Evd.set_eq_sort sigma0 s1 s2
+              | C.CUMUL -> Evd.set_leq_sort sigma0 s1 s2
             in
             report (dbg, ES.Success sigma1)
           with UGraph.UniverseInconsistency e ->
