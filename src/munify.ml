@@ -599,7 +599,7 @@ let rec prune sigma (ev, plist) =
     | Some (m, concl) ->
       let sigma = prune_all m sigma in
       let concl = Evd.evar_concl evi in
-      let sigma, ev' = EU.new_pure_evar env_val' sigma concl in
+      let sigma, ev' = EU.new_pure_evar env_val' sigma ~relevance:(Evd.evar_relevance evi) concl in
       Evd.define ev (mkLEvar sigma (ev', id_env')) sigma
 
 and prune_all map sigma =
@@ -1563,7 +1563,7 @@ module struct
     let naid = Namegen.next_name_away name (Termops.vars_of_env env) in
     let nc' = CND.of_tuple (Context.make_annot naid ERelevance.relevant, None, a) :: nc in
     let sigma', univ = Evd.new_sort_variable Evd.univ_flexible sigma in
-    let sigma'',v = Evarutil.new_pure_evar (EConstr.val_of_named_context nc') sigma' (EConstr.mkSort univ) in
+    let sigma'',v = Evarutil.new_pure_evar (EConstr.val_of_named_context nc') sigma' ~relevance:ERelevance.relevant (EConstr.mkSort univ) in
     let idsubst = (mkRel 1 :: id_substitution nc) in
     unify_constr ~conv_t:C.CUMUL env ty
       (mkProd (Context.make_annot (Names.Name naid) ERelevance.relevant, a, mkLEvar sigma'' (v, idsubst)))
