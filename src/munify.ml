@@ -696,7 +696,7 @@ let check_conv_record env sigma (t1,l1) (t2,l2) =
               else CanonicalSolution.find env sigma (proji, Prod_cs),[a;Termops.pop b]
           | Sort s ->
               CanonicalSolution.find env sigma
-                (proji, Sort_cs (Sorts.family (ESorts.kind sigma s))),[]
+                (proji, Sort_cs (ESorts.quality_or_set sigma s)),[]
           | _ ->
               let c2,_ = Termops.global_of_constr sigma t2 in
               CanonicalSolution.find env sigma (proji, Const_cs c2),l2
