@@ -20,3 +20,4 @@ test-suite/instantiate.v
 test-suite/timings.v
 test-suite/bug_41.v
 test-suite/bug_44.v
+test-suite/bug_102.v
