@@ -678,8 +678,8 @@ exception ProjectionNotFound
 let check_conv_record env sigma (t1,l1) (t2,l2) =
   try
     let (proji,_inst), l1 = try
-        Termops.global_of_constr sigma t1, l1
-      with Not_found ->
+        EConstr.destRef sigma t1, l1
+      with Constr.DestKO ->
         let t1, _, r1 = try destProj sigma t1 with Constr.DestKO -> raise Not_found in
         let app = Retyping.expand_projection env sigma t1 r1 l1 in
         let t1, l1 = destApp sigma app in
@@ -698,9 +698,9 @@ let check_conv_record env sigma (t1,l1) (t2,l2) =
               CanonicalSolution.find env sigma
                 (proji, Sort_cs (ESorts.quality_or_set sigma s)),[]
           | _ ->
-              let c2,_ = Termops.global_of_constr sigma t2 in
+              let c2,_ = EConstr.destRef sigma t2 in
               CanonicalSolution.find env sigma (proji, Const_cs c2),l2
-      with Not_found ->
+      with Not_found | Constr.DestKO ->
         CanonicalSolution.find env sigma (proji, Default_cs),[]
     in
     let open CanonicalSolution in
@@ -1224,7 +1224,7 @@ module struct
       rigid_same sigma0
     | Var id1, Var id2 when Id.equal id1 id2 ->
       rigid_same sigma0
-    | Const (c1,_), Const (c2,_) when Constant.equal c1 c2 ->
+    | Const (c1,_), Const (c2,_) when Environ.QConstant.equal env c1 c2 ->
       report (
         log_eq env "Rigid-Same" conv_t c c' (dbg, sigma0) &&=
         ev_compare_heads env nparams c c')
@@ -1237,7 +1237,7 @@ module struct
         log_eq env "Rigid-Same" conv_t c c' (dbg, sigma0) &&=
         ev_compare_heads env nparams c c')
 
-    | Proj (c1, _, t1), Proj (c2, _, t2) when Names.Projection.repr_equal c1 c2 ->
+    | Proj (c1, _, t1), Proj (c2, _, t2) when Environ.QProjection.Repr.equal env (Projection.repr c1) (Projection.repr c2) ->
       report (
         log_eq env "Proj-Same" conv_t c c' (dbg, sigma0) &&=
         unify_constr env t1 t2)
