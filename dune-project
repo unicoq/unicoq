@@ -1,3 +1,5 @@
-(lang dune 1.8)
+(lang dune 1.9)
 (using coq 0.1)
-(name unicoq)
+;(name unicoq)
+
+(package (name unicoq))
