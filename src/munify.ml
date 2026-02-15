@@ -800,7 +800,7 @@ module type Unifier = sig
            Evd.evar_map -> ES.unification_result
 end
 
-module type UnifT = functor (P : Params) -> Unifier
+module type UnifT = functor (_ : Params) -> Unifier
 
 (** Side module for instnatiation of evars. In certain cases we need
     to call it with specific parameters, and this is why it is not
