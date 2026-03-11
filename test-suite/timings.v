@@ -1,6 +1,6 @@
 (************************************************************************************************)
 (* Unicoq plugin.                                                                               *)
-(* Copyright (c) 2015--2020 Beta Ziliani <beta@mpi-sws.org>                                     *)
+(* Copyright (c) 2015--2026 Beta Ziliani <beta.ziliani@gmail.com>                                     *)
 (*                          Matthieu Sozeau <mattam@mattam.org>.                                *)
 (************************************************************************************************)
 
