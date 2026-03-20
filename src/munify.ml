@@ -1189,10 +1189,8 @@ module struct
             in
             report (dbg, ES.Success sigma1)
           with UGraph.UniverseInconsistency e ->
-            let prq = Termops.pr_evd_qvar sigma0
-            and prl = Termops.pr_evd_level sigma0 in
-	    debug_str (Printf.sprintf "Type-Same exception: %s"
-                  (Pp.string_of_ppcmds (UGraph.explain_universe_inconsistency prq prl e))) 0;
+            debug_str (Printf.sprintf "Type-Same exception: %s"
+                  (Pp.string_of_ppcmds (UGraph.explain_universe_inconsistency (Evd.sort_printer sigma0) e))) 0;
           report (dbg, ES.UnifFailure (sigma0, PE.NotSameHead))
         end
 
