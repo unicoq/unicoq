@@ -33,7 +33,7 @@ let crd_of_tuple (x,y,z) = match y with
 
 (** {2 Options for unification} *)
 
-(** {3 Enabling Unicoq (implementation at the end) *)
+(** {3 Enabling Unicoq (implementation at the end)} *)
 let munify_on = ref false
 
 (** {3 Debugging} *)
@@ -1603,9 +1603,9 @@ let unify_new flags =
   let module M = (val unif (module P)) in
   M.unify_evar_conv
 
-let unify_evar_conv ts =
+let unify_evar_conv sigma ts =
   let module P = (struct
-    let flags = Evarconv.default_flags_of ts
+    let flags = Evarconv.default_flags_of sigma ts
     let wreduce = Both
     let winst = Both
     let match_evars = None
@@ -1613,9 +1613,9 @@ let unify_evar_conv ts =
   let module M = (val unif (module P)) in
   M.unify_evar_conv
 
-let unify_match evars ts =
+let unify_match evars sigma ts =
   let module P = (struct
-    let flags = Evarconv.default_flags_of ts
+    let flags = Evarconv.default_flags_of sigma ts
     let wreduce = Right
     let winst = Left
     let match_evars = Some evars
@@ -1623,9 +1623,9 @@ let unify_match evars ts =
   let module M = (val unif (module P)) in
   M.unify_evar_conv
 
-let unify_match_nored evars ts =
+let unify_match_nored evars sigma ts =
   let module P = (struct
-    let flags = Evarconv.default_flags_of ts
+    let flags = Evarconv.default_flags_of sigma ts
     let wreduce = NoAction
     let winst = Left
     let match_evars = Some evars
@@ -1636,7 +1636,7 @@ let unify_match_nored evars ts =
 let instantiate ?(conv_t=C.CONV) ?(options=default_options) env
       (_, _ as evsubs) t sigma =
   let module P = (struct
-    let flags = Evarconv.default_flags_of TransparentState.full
+    let flags = Evarconv.default_flags_of sigma TransparentState.full
     let wreduce = Both
     let winst = Both
     let match_evars = None

@@ -22,7 +22,7 @@ type options = {
 
 val current_options : unit -> options
 
-val unify_evar_conv : TransparentState.t -> unify_fun
+val unify_evar_conv : Evd.evar_map -> TransparentState.t -> unify_fun
 
 (** Given a set of evars s and terms t1 t2, it unifies the terms only
     allowing instantiations from the evars in t1 and s, and only
@@ -31,10 +31,10 @@ val unify_evar_conv : TransparentState.t -> unify_fun
     instantiated, as long as they occur in s, and only the scrutinee
     (t2) is reduced.  *)
 
-val unify_match : Evar.Set.t -> TransparentState.t -> unify_fun
+val unify_match : Evar.Set.t -> Evd.evar_map -> TransparentState.t -> unify_fun
 
 (** Same as unify_match but with no reduction *)
-val unify_match_nored : Evar.Set.t -> TransparentState.t -> unify_fun
+val unify_match_nored : Evar.Set.t -> Evd.evar_map -> TransparentState.t -> unify_fun
 
 (** Instantiates an evar `?x[subst] args` with a term `t` *)
 val instantiate : ?conv_t:Conversion.conv_pb ->

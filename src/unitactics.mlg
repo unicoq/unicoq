@@ -45,9 +45,9 @@ let munify_tac gl sigma ismatch x y =
     let ts = Conv_oracle.get_transp_state (Environ.oracle env) in
     if ismatch then
       let evars = Evd.fold (fun e _->Evar.Set.add e) sigma Evar.Set.empty in
-      unify_match evars ts env sigma Conversion.CONV x y
+      unify_match evars sigma ts env sigma Conversion.CONV x y
     else
-      unify_evar_conv ts env sigma Conversion.CUMUL x y
+      unify_evar_conv sigma ts env sigma Conversion.CUMUL x y
   in
   match res with
   | Evarsolve.Success evm -> evars evm
