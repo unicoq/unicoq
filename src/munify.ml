@@ -585,10 +585,13 @@ let rec prune sigma (ev, plist) =
   if Evd.is_defined sigma ev then sigma
   else
   let evi = Evd.find_undefined sigma ev in
-  let env = Evd.evar_filtered_context evi in
-  let env' = remove sigma env plist in
-  let env_val' = (List.fold_right push_named_context_val env'
-                    Environ.empty_named_context_val) in
+  let env = Evd.evar_filtered_hyps evi in
+  let env' = remove sigma (EConstr.named_context_of_val env) plist in
+  let env_val' = (List.fold_right (fun d acc ->
+      push_named_context_val (Environ.var_status_ctxt (CND.get_id d) env) d acc)
+      env'
+      Environ.empty_named_context_val)
+  in
   (* the type of the evar may contain an evar depending on the some of
      the vars that we want to prune, so we need to prune that
      as well *)
@@ -849,7 +852,7 @@ module Inst = functor (U : Unifier) -> struct
 	      (* Type(i) <= X -> X := Type j, i <= j *)
 	      Some (dir == Original)
 	   else None)
-	    (EConstr.push_named_context nc env) sigma t' in
+            env sigma t' in
       let t'' = instantiate_evar sigma nc t' subsl in
       (* XXX: EConstr.API *)
       let ty = Evd.existential_type sigma (ev,subs) in
@@ -1559,12 +1562,12 @@ module struct
 
   (* unifies ty with a product type from {name : a} to some Type *)
   and check_product dbg env sigma ty (name, a) =
-    let nc = EConstr.named_context env in
+    let nc = Environ.named_context_val env in
     let naid = Namegen.next_name_away name (Termops.vars_of_env env) in
-    let nc' = CND.of_tuple (Context.make_annot naid ERelevance.relevant, None, a) :: nc in
+    let nc' = EConstr.push_named_context_val ProofVar (CND.of_tuple (Context.make_annot naid ERelevance.relevant, None, a)) nc in
     let sigma', univ = Evd.new_sort_variable Evd.univ_flexible sigma in
-    let sigma'',v = Evarutil.new_pure_evar ~typeclass_candidate:false (EConstr.val_of_named_context nc') sigma' ~relevance:ERelevance.relevant (EConstr.mkSort univ) in
-    let idsubst = (mkRel 1 :: id_substitution nc) in
+    let sigma'',v = Evarutil.new_pure_evar ~typeclass_candidate:false nc' sigma' ~relevance:ERelevance.relevant (EConstr.mkSort univ) in
+    let idsubst = (mkRel 1 :: id_substitution (Environ.named_context_of_val nc)) in
     unify_constr ~conv_t:C.CUMUL env ty
       (mkProd (Context.make_annot (Names.Name naid) ERelevance.relevant, a, mkLEvar sigma'' (v, idsubst)))
       (dbg, sigma'')
