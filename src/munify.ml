@@ -33,7 +33,7 @@ let crd_of_tuple (x,y,z) = match y with
 
 (** {2 Options for unification} *)
 
-(** {3 Enabling Unicoq (implementation at the end) *)
+(** {3 Enabling Unicoq (implementation at the end)} *)
 let munify_on = ref false
 
 (** {3 Debugging} *)
@@ -916,7 +916,7 @@ let ev_compare_heads env nparams1 t1 t2 (dbg, sigma) : unif =
 let tbl = Hashtbl.create 1000
 
 (** The main module *)
-let rec unif (module P : Params) : (module Unifier) = (
+let rec unif : (module Params) -> (module Unifier) = fun (module P) -> (
 module struct
 
   (** If evar e can be instantiated:
