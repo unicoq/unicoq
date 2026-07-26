@@ -30,6 +30,7 @@ Unset Unicoq Super Aggressive.
 Fail Definition test5 (x:nat) : _ x x = S x := eq_refl.
 
 Goal forall x y : nat, True.
+Proof.
   intros.
   mmatch 0 0.
   Fail munify 0 1.
