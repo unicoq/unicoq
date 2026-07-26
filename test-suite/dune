@@ -1,0 +1,9 @@
+(rocq.theory
+ (name Unicoq.Tests)
+ ; Disabled for now: depends on legacy MathComp Ssreflect modules.
+ (modules
+  (:standard \ ssr-bugs))
+ (flags
+  (:standard -test-mode))
+ (plugins unicoq.plugin)
+ (theories Unicoq))
