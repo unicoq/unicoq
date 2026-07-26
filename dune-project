@@ -1,6 +1,5 @@
-(lang dune 1.9)
-
-(using coq 0.1)
+(lang dune 3.24)
+(using rocq 0.14)
 
 (package
  (name unicoq))

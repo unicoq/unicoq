@@ -1,11 +1,9 @@
 (library
  (name unicoq)
  (public_name unicoq.plugin)
- ; Coq default set of warnings
+ ; Rocq default set of warnings
  (flags :standard -w -9-27)
  (libraries rocq-runtime.plugins.ltac))
 
-(rule
- (targets unitactics.ml)
- (deps (:pp-file unitactics.mlg))
- (action (run coqpp %{pp-file})))
+(rocq.pp
+ (modules unitactics))
