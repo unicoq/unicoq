@@ -1,5 +1,6 @@
-(coq.theory
+(rocq.theory
  (name Unicoq) ; This determines the -R flag
- (public_name unicoq.Unicoq)
+ (package unicoq)
  (synopsis "Unicoq Plugin")
- (libraries unicoq.plugin))
+ (no_corelib)
+ (plugins rocq-runtime.plugins.ltac unicoq.plugin))
