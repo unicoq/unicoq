@@ -713,7 +713,9 @@ let check_conv_record env sigma (t1,l1) (t2,l2) =
         if is_default then begin
           (* A default canonical value has no arguments.  Accepting one here
              with a non-empty spine would silently discard those arguments. *)
-          if List.is_empty solution.cvalue_arguments then [] else raise Not_found
+          match solution.cvalue_arguments with
+          | [] -> []
+          | _ -> raise Not_found
         end
         else if List.length solution.cvalue_arguments = nargs + List.length args2'
         then args2' @ args2
