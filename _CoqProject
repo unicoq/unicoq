@@ -16,8 +16,10 @@ theories/Unicoq.v
 test-suite/munifytest.v
 test-suite/microtests.v
 test-suite/primitive.v
+test-suite/canonical_projections.v
 test-suite/instantiate.v
 test-suite/timings.v
 test-suite/bug_41.v
 test-suite/bug_44.v
+test-suite/bug_101.v
 test-suite/bug_102.v
