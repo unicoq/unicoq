@@ -1,32 +1,48 @@
-# UniCoq
+# Unicoq
 
 ![Unicoq logo](/doc/unicoq-small.png?raw=true)
 
-An enhanced unification algorithm for Rocq
+A different unification algorithm for Rocq.
 
 Copyright (c) 2015--2026
   Beta Ziliani <beta.ziliani@gmail.com>,
   Jan-Oliver Kaiser <mail@janno-kaiser.de>,
   Matthieu Sozeau <mattam@mattam.org>
 
-Distributed under the terms of the MIT License,
-see LICENSE for details.
+Distributed under the terms of the MIT License, see LICENSE for details.
 
-This archive contains a different unification algorithm for Rocq, as
-a plugin that replaces the existing unification algorithm. This
-algorithm is described in detail in
-[A comprehensible guide to a new unifier for CIC including universe polymorphism and overloading](https://doi.org/10.1017/S0956796817000028).
+## Why another algorithm?
 
-The archive has 3 subdirectories:
+Rocq comes with two user-facing unification algorithms, one used by tactics
+like `apply` and `rewrite`, and another one used by ssreflect's tactics and
+term elaboration. The former is unsound, meaning that it's possible to unify
+terms yet the resulting substitution produces ill-typed terms. The latter,
+called evarconv, _seems_ sound, but it applies several heuristics that makes
+it hard to debug and understand.
+
+Unicoq is a plugin that replaces evarconv with an algorithm that is described
+in detail in [A comprehensible guide to a new unifier for CIC including universe polymorphism and overloading](https://doi.org/10.1017/S0956796817000028).
+
+Pros:
+ * It's simpler and easier to debug than evarconv.
+ * It's formally described, which in itself is not a proof of soundness, but it's a big first step.
+ * It solves some problems that evarconv can't solve.
+
+Cons:
+ * evarconv solves more problems, even if it misses some that Unicoq solve.
+ * evarconv is faster.
+
+## Contents
+
+The repository has 3 subdirectories:
 * `src` contains the code of the plugin in `munify.ml`.
 
 * `theories` contains support Rocq files for the plugin.
   `Unicoq.v` declares the plugin on the Coq side.
 
-* `test-suite` just tests and demonstrates the use of the plugin
+* `test-suite` just tests and demonstrates the use of the plugin.
 
-Installation
-============
+## Installation
 
 The plugin works currently with Rocq master, although there are releases
 for previous versions as well. Through OPAM, this plugin is available
@@ -52,13 +68,13 @@ Add LoadPath "path_to_unicoq/theories" as Unicoq.
 Add ML Path "path_to_unicoq/src".
 ```
 
-# Usage
+## Usage
 
 Once installed, you can `Require Import Unicoq.Unicoq` to load the
-plugin, which will install unicoq's unification algorithm as the
+plugin, which will install Unicoq's unification algorithm as the
 unifier called when typechecking terms (Definitions...) and when
 using the `refine` tactic. Note that Coq's standard `apply`,
-`rewrite` etc... still use a different unification algorithm.
+`rewrite`, etc... still use a different unification algorithm.
 On the other hand, if you use Ssreflect all tactics will call
 unicoq's unifier.
 
