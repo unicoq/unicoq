@@ -649,28 +649,49 @@ let check_conv_record env sigma (t1,l1) (t2,l2) =
         let gr1 = GlobRef.ConstRef c1 in
         (gr1, inst), Array.to_list l1
     in
-    let (sigma, solution), l2_effective =
-      try
-        let open ValuePattern in
-        match kind sigma t2 with
-            Prod (_,a,b) -> (* assert (l2=[]); *)
-                    if Termops.dependent sigma (mkRel 1) b then raise Not_found
-              else CanonicalSolution.find env sigma (proji, Prod_cs),[a;Termops.pop b]
-          | Sort s ->
-              CanonicalSolution.find env sigma
-                (proji, Sort_cs (ESorts.quality_or_set sigma s)),[]
-          | _ ->
-              let c2,_ = EConstr.destRef sigma t2 in
-              CanonicalSolution.find env sigma (proji, Const_cs c2),l2
-      with Not_found | Constr.DestKO ->
-        CanonicalSolution.find env sigma (proji, Default_cs),[]
-    in
     let open CanonicalSolution in
-    let params1, c1, extra_args1 =
-      match CList.chop solution.nparams l1 with
-      | params1, c1::extra_args1 -> params1, c1, extra_args1
-      | _ -> raise Not_found in
-    let us2,extra_args2 = CList.chop (List.length solution.cvalue_arguments) l2_effective in
+    let pat, args2' =
+      try
+        let pat, _, args = ValuePattern.of_constr sigma t2 in
+        pat, args
+      with Constr.DestKO -> ValuePattern.Default_cs, []
+    in
+    let decompose_solution solution is_default =
+      let params1, c1, extra_args1 =
+        match CList.chop solution.nparams l1 with
+        | params1, c1::extra_args1 -> params1, c1, extra_args1
+        | _ -> raise Not_found in
+      (* A primitive projection keeps its subject outside the application
+         spine.  Consequently, the arguments following the projection must
+         be split from the right-hand spine before they are matched against
+         the canonical value's arguments. *)
+      let nargs = List.length l2 - List.length extra_args1 in
+      if nargs < 0 then raise Not_found;
+      let args2, extra_args2 = CList.chop nargs l2 in
+      let l2_effective =
+        if is_default then begin
+          (* A default canonical value has no arguments.  Accepting one here
+             with a non-empty spine would silently discard those arguments. *)
+          match solution.cvalue_arguments with
+          | [] -> []
+          | _ -> raise Not_found
+        end
+        else if List.length solution.cvalue_arguments = nargs + List.length args2'
+        then args2' @ args2
+        else raise Not_found
+      in
+      params1, c1, extra_args1, l2_effective, extra_args2
+    in
+    let (sigma, solution), (params1, c1, extra_args1, l2_effective, extra_args2) =
+      try
+        if pat = ValuePattern.Default_cs then raise Not_found;
+        let sigma, solution = CanonicalSolution.find env sigma (proji, pat) in
+        (sigma, solution), decompose_solution solution false
+      with Not_found ->
+        let sigma, solution = CanonicalSolution.find env sigma (proji, ValuePattern.Default_cs) in
+        (sigma, solution), decompose_solution solution true
+    in
+    let us2 = l2_effective in
     sigma,solution.constant,solution.abstractions_ty,(solution.params,params1),(solution.cvalue_arguments,us2),(extra_args1,extra_args2),c1,
     (solution.cvalue_abstraction,applist(t2,l2))
   with Failure _ | Not_found ->
