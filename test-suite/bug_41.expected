@@ -1,4 +1,4 @@
-File "./unirocq/test-suite/bug_41.v", line 6, characters 17-44:
+File "./test-suite/bug_41.v", line 6, characters 17-44:
 The command has indeed failed with message:
 Tactic failure: Unification failed.
 tt
