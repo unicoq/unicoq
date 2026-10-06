@@ -22,6 +22,7 @@ Section Test.
   Set Printing Primitive Projection Parameters.
 
   Goal B.(@goal) P Q.
+  Proof.
     (* Everything is phrased in terms of the constant [goal]. *)
     IHateLtac B ltac:(fun p q =>
       match goal with
