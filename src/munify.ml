@@ -697,7 +697,8 @@ let check_conv_record env sigma (t1,l1) (t2,l2) =
         (sigma, solution), decompose_solution solution true
     in
     let us2 = l2_effective in
-    sigma,solution.constant,solution.abstractions_ty,(solution.params,params1),(solution.cvalue_arguments,us2),(extra_args1,extra_args2),c1,
+    let canonical_head = fst (decompose_app_list sigma solution.body) in
+    sigma,(canonical_head,t2),solution.constant,solution.abstractions_ty,(solution.params,params1),(solution.cvalue_arguments,us2),(extra_args1,extra_args2),c1,
     (solution.cvalue_abstraction,rhs_prefix)
   with Failure _ | Not_found ->
     raise ProjectionNotFound
@@ -984,7 +985,7 @@ module struct
           else
             begin
               try_run_and_unify env t t' (dbg, sigma)
-              ||= try_canonical_structures env t t' sigma
+              ||= try_canonical_structures conv_t env t t' sigma
               ||= try_app_fo conv_t env t t' sigma
               ||= cont conv_t env t t' sigma
             end
@@ -1043,18 +1044,18 @@ module struct
       | Some (sigma2, v') -> unify' env (decompose_app_list sigma2 v) (decompose_app_list sigma2 v') (dbg, sigma2)
       | _ -> (dbg, ES.UnifFailure (sigma1, PE.NotSameHead))
 
-  and try_canonical_structures env (c, _ as t) (c', _ as t') sigma dbg =
+  and try_canonical_structures conv_t env (c, _ as t) (c', _ as t') sigma dbg =
     if (isConst sigma c || isConst sigma c' || isProj sigma c || isProj sigma c')
         && not (eq_constr sigma c c') then
-      try conv_record dbg env sigma t t'
+      try conv_record Original conv_t dbg env sigma t t'
       with ProjectionNotFound ->
-      try conv_record dbg env sigma t' t
+      try conv_record Swap conv_t dbg env sigma t' t
       with ProjectionNotFound -> (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
     else
       (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
 
-  and conv_record dbg env evd t t' =
-    let (evd,c,bs,(params,params1),(us,us2),(ts,ts1),c1,(n,rhs_prefix)) = check_conv_record env evd t t' in
+  and conv_record dir conv_t dbg env evd t t' =
+    let (evd,(canonical_head,rhs_head),c,bs,(params,params1),(us,us2),(ts,ts1),c1,(n,rhs_prefix)) = check_conv_record env evd t t' in
     let (evd',ks,_,type_checks) =
       List.fold_left
         (fun (i,ks,m,checks) b ->
@@ -1077,14 +1078,22 @@ module struct
         (dbg,ES.UnifFailure (sigma,PE.NotSameHead))
     in
     report (
-      log_eq_spine env "CS" C.CONV t t' (dbg, evd') &&=
+      switch dir (log_eq_spine env "CS" conv_t) t t' (dbg, evd') &&=
       ise_list2 (fun x1 x -> unify_constr env x1 (substl ks x)) params1 params &&=
       ise_list2 (fun u1 u -> unify_constr env u1 (substl ks u)) us2 us &&=
       unify' env (decompose_app_list evd' c1) (c,(List.rev ks)) &&=
       ise_list2 (unify_constr env) ts ts1 &&= fun (dbg,sigma) ->
       List.fold_left
         (fun state obligation -> state &&= check_type obligation)
-        (dbg,ES.Success sigma) type_checks)
+        (dbg,ES.Success sigma) type_checks &&= fun (dbg,sigma) ->
+      let canonical_head =
+        fst (decompose_app_list sigma (substl ks canonical_head)) in
+      let residual_pb = match kind sigma canonical_head,kind sigma rhs_head with
+        | Lambda _,_ | _,Lambda _ -> C.CONV
+        | _ -> conv_t
+      in
+      switch dir (unify_constr ~conv_t:residual_pb env)
+        canonical_head rhs_head (dbg,sigma))
 
   and try_app_fo conv_t env (c, l as t) (c', l' as t') sigma dbg =
     let nparams = List.length l in

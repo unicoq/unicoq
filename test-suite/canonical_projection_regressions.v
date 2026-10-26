@@ -82,14 +82,14 @@ Canonical succR : R := {|f:=S|}.
 Goal True.
 Proof.
   evar (r:R).
-  Fail assert_fails ltac:(let s:=eval unfold r in r in munify (f s) (fun n:nat=>S(S n))).
+  assert_fails ltac:(let s:=eval unfold r in r in munify (f s) (fun n:nat=>S(S n))).
   let s:=eval unfold r in r in is_evar s.
   finish_subject r succR; exact I.
 Qed.
 Goal True.
 Proof.
   evar (r:R).
-  Fail assert_fails ltac:(let s:=eval unfold r in r in munify (fun n:nat=>S(S n)) (f s)).
+  assert_fails ltac:(let s:=eval unfold r in r in munify (fun n:nat=>S(S n)) (f s)).
   let s:=eval unfold r in r in is_evar s.
   finish_subject r succR; exact I.
 Qed.
@@ -111,11 +111,10 @@ Canonical wrap (g:nat->nat) : R := {|f:=fun n=>S(g n)|}.
 Goal True.
 Proof.
   evar (r:R).
-  Fail let s:=eval unfold r in r in
+  let s:=eval unfold r in r in
   munify (f s) (fun n:nat=>S(S n));
   let expected:=constr:(wrap S) in constr_eq s expected;
   pose proof (eq_refl (f s) : f s = (fun n:nat=>S(S n))).
-  finish_subject r (wrap S).
   exact I.
 Qed.
 End ResidualEvars.
@@ -136,7 +135,7 @@ Qed.
 Goal True.
 Proof.
   evar (r:R).
-  Fail assert_fails ltac:(let s:=eval unfold r in r in munify (carrier s) Type@{lo}).
+  assert_fails ltac:(let s:=eval unfold r in r in munify (carrier s) Type@{lo}).
   let s:=eval unfold r in r in is_evar s.
   finish_subject r high; exact I.
 Qed.
@@ -144,7 +143,7 @@ Goal True.
 Proof.
   evar (r:R).
 
-  Fail assert_fails ltac:(let s:=eval unfold r in r in mmatch (carrier s) Type@{lo}).
+  assert_fails ltac:(let s:=eval unfold r in r in mmatch (carrier s) Type@{lo}).
   let s:=eval unfold r in r in is_evar s.
   finish_subject r high; exact I.
 Qed.
@@ -155,14 +154,14 @@ Canonical high : R := {|f:=fun _=>Type@{hi}|}.
 Goal True.
 Proof.
   evar (r:R).
-  Fail assert_fails ltac:(let s:=eval unfold r in r in munify (f s) (fun _:nat=>Type@{lo})).
+  assert_fails ltac:(let s:=eval unfold r in r in munify (f s) (fun _:nat=>Type@{lo})).
   let s:=eval unfold r in r in is_evar s.
   finish_subject r high; exact I.
 Qed.
 Goal True.
 Proof.
   evar (r:R).
-  Fail assert_fails ltac:(let s:=eval unfold r in r in munify (fun _:nat=>Type@{lo}) (f s)).
+  assert_fails ltac:(let s:=eval unfold r in r in munify (fun _:nat=>Type@{lo}) (f s)).
   let s:=eval unfold r in r in is_evar s.
   finish_subject r high; exact I.
 Qed.
@@ -305,14 +304,14 @@ Canonical succR : R := {|f:=S|}.
 Goal True.
 Proof.
   evar (r:R).
-  Fail assert_fails ltac:(let s:=eval unfold r in r in munify (f s) (fun n:nat=>S(S n))).
+  assert_fails ltac:(let s:=eval unfold r in r in munify (f s) (fun n:nat=>S(S n))).
   let s:=eval unfold r in r in is_evar s.
   finish_subject r succR; exact I.
 Qed.
 Goal True.
 Proof.
   evar (r:R).
-  Fail assert_fails ltac:(let s:=eval unfold r in r in munify (fun n:nat=>S(S n)) (f s)).
+  assert_fails ltac:(let s:=eval unfold r in r in munify (fun n:nat=>S(S n)) (f s)).
   let s:=eval unfold r in r in is_evar s.
   finish_subject r succR; exact I.
 Qed.
@@ -334,11 +333,10 @@ Canonical wrap (g:nat->nat) : R := {|f:=fun n=>S(g n)|}.
 Goal True.
 Proof.
   evar (r:R).
-  Fail let s:=eval unfold r in r in
+  let s:=eval unfold r in r in
   munify (f s) (fun n:nat=>S(S n));
   let expected:=constr:(wrap S) in constr_eq s expected;
   pose proof (eq_refl (f s) : f s = (fun n:nat=>S(S n))).
-  finish_subject r (wrap S).
   exact I.
 Qed.
 End ResidualEvars.
@@ -359,7 +357,7 @@ Qed.
 Goal True.
 Proof.
   evar (r:R).
-  Fail assert_fails ltac:(let s:=eval unfold r in r in munify (carrier s) Type@{lo}).
+  assert_fails ltac:(let s:=eval unfold r in r in munify (carrier s) Type@{lo}).
   let s:=eval unfold r in r in is_evar s.
   finish_subject r high; exact I.
 Qed.
@@ -367,7 +365,7 @@ Goal True.
 Proof.
   evar (r:R).
 
-  Fail assert_fails ltac:(let s:=eval unfold r in r in mmatch (carrier s) Type@{lo}).
+  assert_fails ltac:(let s:=eval unfold r in r in mmatch (carrier s) Type@{lo}).
   let s:=eval unfold r in r in is_evar s.
   finish_subject r high; exact I.
 Qed.
@@ -378,14 +376,14 @@ Canonical high : R := {|f:=fun _=>Type@{hi}|}.
 Goal True.
 Proof.
   evar (r:R).
-  Fail assert_fails ltac:(let s:=eval unfold r in r in munify (f s) (fun _:nat=>Type@{lo})).
+  assert_fails ltac:(let s:=eval unfold r in r in munify (f s) (fun _:nat=>Type@{lo})).
   let s:=eval unfold r in r in is_evar s.
   finish_subject r high; exact I.
 Qed.
 Goal True.
 Proof.
   evar (r:R).
-  Fail assert_fails ltac:(let s:=eval unfold r in r in munify (fun _:nat=>Type@{lo}) (f s)).
+  assert_fails ltac:(let s:=eval unfold r in r in munify (fun _:nat=>Type@{lo}) (f s)).
   let s:=eval unfold r in r in is_evar s.
   finish_subject r high; exact I.
 Qed.
