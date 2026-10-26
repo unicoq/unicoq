@@ -68,6 +68,14 @@ Add LoadPath "path_to_unicoq/theories" as Unicoq.
 Add ML Path "path_to_unicoq/src".
 ```
 
+## Hacking
+
+Dune versions before 3.25 do not add all required OCaml paths to generated
+`_RocqProject` files (https://github.com/ocaml/dune/issues/16555). This leads
+to failures in ProofGeneral and other editors that rely on these files. We
+provide a direnv file , `.envrc`, that adds the missing paths. Start your
+editor from an environment that has been extended with `.envrc`'s contents.
+
 ## Usage
 
 Once installed, you can `Require Import Unicoq.Unicoq` to load the
