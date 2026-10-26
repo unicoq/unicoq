@@ -685,9 +685,9 @@ let check_conv_record env sigma (t1,l1) (t2,l2) =
         then args2' @ args2
         else raise Not_found
       in
-      params1, c1, extra_args1, l2_effective, extra_args2
+      params1, c1, extra_args1, l2_effective, extra_args2, applist(t2,args2)
     in
-    let (sigma, solution), (params1, c1, extra_args1, l2_effective, extra_args2) =
+    let (sigma, solution), (params1, c1, extra_args1, l2_effective, extra_args2, rhs_prefix) =
       try
         if pat = ValuePattern.Default_cs then raise Not_found;
         let sigma, solution = CanonicalSolution.find env sigma (proji, pat) in
@@ -698,7 +698,7 @@ let check_conv_record env sigma (t1,l1) (t2,l2) =
     in
     let us2 = l2_effective in
     sigma,solution.constant,solution.abstractions_ty,(solution.params,params1),(solution.cvalue_arguments,us2),(extra_args1,extra_args2),c1,
-    (solution.cvalue_abstraction,applist(t2,l2))
+    (solution.cvalue_abstraction,rhs_prefix)
   with Failure _ | Not_found ->
     raise ProjectionNotFound
 
@@ -1054,25 +1054,37 @@ module struct
       (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
 
   and conv_record dbg env evd t t' =
-    let (evd,c,bs,(params,params1),(us,us2),(ts,ts1),c1,(n,t2)) = check_conv_record env evd t t' in
-    let (evd',ks,_) =
+    let (evd,c,bs,(params,params1),(us,us2),(ts,ts1),c1,(n,rhs_prefix)) = check_conv_record env evd t t' in
+    let (evd',ks,_,type_checks) =
       List.fold_left
-        (fun (i,ks,m) b ->
-	   match n with
-           | Some n when m = n -> (i,t2::ks, m-1)
+        (fun (i,ks,m,checks) b ->
+           match n with
+           | Some n when m = n ->
+             let expected_type = substl ks b in
+             (i,rhs_prefix::ks,m-1,(rhs_prefix,expected_type)::checks)
            | _ ->
              let dloc = Loc.tag @@ Evar_kinds.InternalHole in
              let sigma = i in
              let sigma, ev = Evarutil.new_evar ~typeclass_candidate:true env sigma ~src:dloc (substl ks b) in
-             (sigma, ev :: ks, m - 1))
-        (evd,[],List.length bs) bs
+             (sigma, ev :: ks, m - 1,checks))
+        (evd,[],List.length bs,[]) bs
+    in
+    let check_type (term,expected_type) (dbg,sigma) =
+      try
+        let actual_type = Retyping.get_type_of env sigma term in
+        unify_constr ~conv_t:C.CUMUL env actual_type expected_type (dbg,sigma)
+      with Retyping.RetypeError _ ->
+        (dbg,ES.UnifFailure (sigma,PE.NotSameHead))
     in
     report (
       log_eq_spine env "CS" C.CONV t t' (dbg, evd') &&=
       ise_list2 (fun x1 x -> unify_constr env x1 (substl ks x)) params1 params &&=
       ise_list2 (fun u1 u -> unify_constr env u1 (substl ks u)) us2 us &&=
       unify' env (decompose_app_list evd' c1) (c,(List.rev ks)) &&=
-      ise_list2 (unify_constr env) ts ts1)
+      ise_list2 (unify_constr env) ts ts1 &&= fun (dbg,sigma) ->
+      List.fold_left
+        (fun state obligation -> state &&= check_type obligation)
+        (dbg,ES.Success sigma) type_checks)
 
   and try_app_fo conv_t env (c, l as t) (c', l' as t') sigma dbg =
     let nparams = List.length l in

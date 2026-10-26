@@ -10,21 +10,19 @@ Canonical wrap (g:nat->nat) : R := {|f:=g|}.
 Goal True.
 Proof.
   evar (r:R).
-  Fail let s:=eval unfold r in r in
+  let s:=eval unfold r in r in
   munify (f s 0) (S 0);
   let expected:=constr:(wrap S) in constr_eq s expected;
   pose proof (eq_refl (f s 0) : f s 0 = S 0).
-  finish_subject r (wrap S).
   exact I.
 Qed.
 Goal True.
 Proof.
   evar (r:R).
-  Fail let s:=eval unfold r in r in
+  let s:=eval unfold r in r in
   munify (S 0) (f s 0);
   let expected:=constr:(wrap S) in constr_eq s expected;
   pose proof (eq_refl (f s 0) : f s 0 = S 0).
-  finish_subject r (wrap S).
   exact I.
 Qed.
 End Defaults.
@@ -35,21 +33,19 @@ Canonical wrap (g:nat->nat->nat) : R := {|f:=g|}.
 Goal forall n:nat, True.
 Proof.
   intros n; evar (r:R).
-  Fail let s:=eval unfold r in r in
+  let s:=eval unfold r in r in
   munify (f s n) (Nat.add n);
   let expected:=constr:(wrap Nat.add) in constr_eq s expected;
   pose proof (eq_refl (f s n) : f s n = Nat.add n).
-  finish_subject r (wrap Nat.add).
   exact I.
 Qed.
 Goal forall n m:nat, True.
 Proof.
   intros n m; evar (r:R).
-  Fail let s:=eval unfold r in r in
+  let s:=eval unfold r in r in
   munify (Nat.add n m) (f s n m);
   let expected:=constr:(wrap Nat.add) in constr_eq s expected;
   pose proof (eq_refl (f s n m) : f s n m = Nat.add n m).
-  finish_subject r (wrap Nat.add).
   exact I.
 Qed.
 End BinaryDefaults.
@@ -60,11 +56,10 @@ Canonical wrap (A:Type) (a:A) (g:nat->nat) : R A a := {|f:=g|}.
 Goal True.
 Proof.
   evar (r:R unit tt).
-  Fail let s:=eval unfold r in r in
+  let s:=eval unfold r in r in
   munify (f _ _ s 0) (S 0);
   let expected:=constr:(wrap unit tt S) in constr_eq s expected;
   pose proof (eq_refl (f _ _ s 0) : f _ _ s 0 = S 0).
-  finish_subject r (wrap unit tt S).
   exact I.
 Qed.
 End ParameterDefaults.
@@ -78,8 +73,7 @@ Proof.
   intros A; evar (r:R).
   let s:=eval unfold r in r in munify (carrier s) A.
   exact I.
-Fail Qed.
-Abort.
+Qed.
 End DefaultTypes.
 
 Module Lambdas.
@@ -239,21 +233,19 @@ Canonical wrap (g:nat->nat) : R := {|f:=g|}.
 Goal True.
 Proof.
   evar (r:R).
-  Fail let s:=eval unfold r in r in
+  let s:=eval unfold r in r in
   munify (f s 0) (S 0);
   let expected:=constr:(wrap S) in constr_eq s expected;
   pose proof (eq_refl (f s 0) : f s 0 = S 0).
-  finish_subject r (wrap S).
   exact I.
 Qed.
 Goal True.
 Proof.
   evar (r:R).
-  Fail let s:=eval unfold r in r in
+  let s:=eval unfold r in r in
   munify (S 0) (f s 0);
   let expected:=constr:(wrap S) in constr_eq s expected;
   pose proof (eq_refl (f s 0) : f s 0 = S 0).
-  finish_subject r (wrap S).
   exact I.
 Qed.
 End Defaults.
@@ -264,21 +256,19 @@ Canonical wrap (g:nat->nat->nat) : R := {|f:=g|}.
 Goal forall n:nat, True.
 Proof.
   intros n; evar (r:R).
-  Fail let s:=eval unfold r in r in
+  let s:=eval unfold r in r in
   munify (f s n) (Nat.add n);
   let expected:=constr:(wrap Nat.add) in constr_eq s expected;
   pose proof (eq_refl (f s n) : f s n = Nat.add n).
-  finish_subject r (wrap Nat.add).
   exact I.
 Qed.
 Goal forall n m:nat, True.
 Proof.
   intros n m; evar (r:R).
-  Fail let s:=eval unfold r in r in
+  let s:=eval unfold r in r in
   munify (Nat.add n m) (f s n m);
   let expected:=constr:(wrap Nat.add) in constr_eq s expected;
   pose proof (eq_refl (f s n m) : f s n m = Nat.add n m).
-  finish_subject r (wrap Nat.add).
   exact I.
 Qed.
 End BinaryDefaults.
@@ -289,11 +279,10 @@ Canonical wrap (A:Type) (a:A) (g:nat->nat) : R A a := {|f:=g|}.
 Goal True.
 Proof.
   evar (r:R unit tt).
-  Fail let s:=eval unfold r in r in
+  let s:=eval unfold r in r in
   munify (f _ _ s 0) (S 0);
   let expected:=constr:(wrap unit tt S) in constr_eq s expected;
   pose proof (eq_refl (f _ _ s 0) : f _ _ s 0 = S 0).
-  finish_subject r (wrap unit tt S).
   exact I.
 Qed.
 End ParameterDefaults.
@@ -307,8 +296,7 @@ Proof.
   intros A; evar (r:R).
   let s:=eval unfold r in r in munify (carrier s) A.
   exact I.
-Fail Qed.
-Abort.
+Qed.
 End DefaultTypes.
 
 Module Lambdas.
