@@ -4,7 +4,7 @@ From Unicoq Require Import Unicoq.
    projection is represented primitively.  Each test leaves the record evar
    open and makes [munify] infer it from a projected field. *)
 
-(* Set Primitive Projections. *)
+Set Primitive Projections.
 
 Module NoParameters.
   Record structure := { carrier : Type }.
