@@ -6,14 +6,11 @@ homepage: "https://github.com/unicoq/unicoq"
 bug-reports: "https://github.com/unicoq/unicoq/issues"
 license: "MIT"
 build: [
-  ["coq_makefile" "-f" "_CoqProject" "-o" "Makefile"]
-  [make]
-]
-install: [
-  [make "install"]
+  ["dune" "build" "-p" name "-j" jobs "@install" "@runtest" {with-test}]
 ]
 depends: [
-  "ocaml"
-  "coq"
+  "ocaml" {>= "4.14"}
+  "dune" {>= "3.24"}
+  "rocq-core" {= "dev"}
 ]
-synopsis: "An enhanced unification algorithm for Coq"
+synopsis: "An enhanced unification algorithm for Rocq"
