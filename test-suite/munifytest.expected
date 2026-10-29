@@ -1,0 +1,1522 @@
+STATS:	0		0
+?A =<= nat (Meta-Inst) OK
+_Set =<= Type (Reduce-Same) OK
+(nat -> nat) =<= nat (App-FO) ERR
+(nat -> nat) =<= nat (App-FO) ERR
+(?x = ?x) =<= ((?n : nat -> nat) 0 = 1) (App-FO) OK
+_@eq =<= @eq (Rigid-Same) OK
+_?A =?= nat (Meta-Inst) OK
+__Set =<= Type (Reduce-Same) OK
+_?x =?= (?n 0) (Meta-Inst) OK
+__nat =<= nat (Reduce-Same) OK
+_(?n 0) =?= 1 (Meta-FO) OK
+__?n =?= S (Meta-Inst) OK
+___(nat -> nat) =<= (nat -> nat) (Reduce-Same) OK
+__0 =?= 0 (Reduce-Same) OK
+?A =<= nat (Meta-Inst) OK
+_Set =<= Type (Reduce-Same) OK
+(nat -> nat) =<= nat (App-FO) ERR
+(nat -> nat) =<= nat (App-FO) ERR
+(?x = ?x) =<= (match 0 with
+ | 0 => (?n : nat -> nat) 0
+ | S _ => 1
+ end = 1) (App-FO) OK
+_@eq =<= @eq (Rigid-Same) OK
+_?A =?= nat (Meta-Inst) OK
+__Set =<= Type (Reduce-Same) OK
+_?x =?= match 0 with
+| 0 => (?n : nat -> nat) 0
+| S _ => 1
+end (Meta-Inst) OK
+__nat =<= nat (Reduce-Same) OK
+_match 0 with
+| 0 => (?n : nat -> nat) 0
+| S _ => 1
+end =?= 1 (Case-IotaL) OK
+__(?n 0) =?= 1 (Meta-FO) OK
+___?n =?= S (Meta-Inst) OK
+____(nat -> nat) =<= (nat -> nat) (Reduce-Same) OK
+___0 =?= 0 (Reduce-Same) OK
+?A =<= nat (Meta-Inst) OK
+_Set =<= Type (Reduce-Same) OK
+(?x = ?x) =<= ((?n : nat -> nat) 0 = 0) (App-FO) ERR
+_@eq =<= @eq (Rigid-Same) OK
+_?A =?= nat (Meta-Inst) OK
+__Set =<= Type (Reduce-Same) OK
+_?x =?= (?n 0) (Meta-Inst) OK
+__nat =<= nat (Reduce-Same) OK
+(?x = ?x) =<= ((?n : nat -> nat) 0 = 0) (App-FO) ERR
+_@eq =<= @eq (Rigid-Same) OK
+_?A =?= nat (Meta-Inst) OK
+__Set =<= Type (Reduce-Same) OK
+_?x =?= (?n 0) (Meta-Inst) OK
+__nat =<= nat (Reduce-Same) OK
+File "./test-suite/munifytest.v", line 19, characters 50-57:
+The command has indeed failed with message:
+The term "eq_refl" has type "?x = ?x" while it is expected to have type
+ "?n 0 = 0".
+?A =<= nat (Meta-Inst) OK
+_Set =<= Type (Reduce-Same) OK
+(?x = ?x) =<= ((?n : nat -> nat) 0 = 0) (App-FO) OK
+_@eq =<= @eq (Rigid-Same) OK
+_?A =?= nat (Meta-Inst) OK
+__Set =<= Type (Reduce-Same) OK
+_?x =?= (?n 0) (Meta-Inst) OK
+__nat =<= nat (Reduce-Same) OK
+_((fun x : nat => ?n) 0) =?= 0 (Meta-Specialize) OK
+__?n =?= 0 (Meta-DelDeps) OK
+___?n =?= 0 (Meta-Inst) OK
+____nat =<= nat (Reduce-Same) OK
+File "./test-suite/munifytest.v", line 25, characters 0-58:
+The command has indeed failed with message:
+The following term contains unresolved implicit arguments:
+  ((?n : nat -> nat) 0 = 0)
+More precisely: 
+- ?n: Cannot infer this placeholder of type "nat -> nat".
+?T =<= nat (Meta-Inst) OK
+_Set =<= Type (Reduce-Same) OK
+?T@\{x:=x; x0:=x\} =<= nat (Meta-Inst) OK
+_Set =<= Type (Reduce-Same) OK
+?T@\{x:=x; x0:=x; x1:=x\} =<= ?A (Meta-Inst) ERR
+_?A =<= ?T@\{x:=x; x0:=x; x1:=x\} (Meta-Inst) OK
+?T@\{x:=x; x0:=x; x1:=x\} =<= nat (Meta-Inst) OK
+_Set =<= Type (Reduce-Same) OK
+(?x = ?x) =<= (?n x x = S x) (App-FO) ERR
+_@eq =<= @eq (Rigid-Same) OK
+_?A =?= nat (Meta-Inst) OK
+__Set =<= Type (Reduce-Same) OK
+_(?n x x) =?= ?x (Meta-Inst) ERR
+_?x =?= (?n x x) (Meta-Inst) OK
+__nat =<= nat (Reduce-Same) OK
+_(?n x x) =?= (S x) (Meta-Inst) ERR
+_(?n x x) =?= (S x) (Meta-DelDeps) ERR
+__(?n x x) =?= (S x) (Meta-Inst) ERR
+(?x = ?x) =<= (?n x x = S x) (App-FO) ERR
+_@eq =<= @eq (Rigid-Same) OK
+_?A =?= nat (Meta-Inst) OK
+__Set =<= Type (Reduce-Same) OK
+_(?n x x) =?= ?x (Meta-Inst) ERR
+_?x =?= (?n x x) (Meta-Inst) OK
+__nat =<= nat (Reduce-Same) OK
+_(?n x x) =?= (S x) (Meta-Inst) ERR
+_(?n x x) =?= (S x) (Meta-DelDeps) ERR
+__(?n x x) =?= (S x) (Meta-Inst) ERR
+File "./test-suite/munifytest.v", line 30, characters 47-54:
+The command has indeed failed with message:
+In environment
+x : nat
+The term "eq_refl" has type "?x = ?x" while it is expected to have type
+ "?n x x = S x".
+0 =?= 0 (App-FO) OK
+_0 =?= 0 (Rigid-Same) OK
+File "./test-suite/munifytest.v", line 36, characters 7-17:
+The command has indeed failed with message:
+Tactic failure: Unification failed.
+Decimal.uint <?= Decimal.uint
+Decimal.uint <?= Decimal.uint
+Number.uint <?= Number.uint
+Decimal.uint <?= Decimal.uint
+Decimal.uint <?= Decimal.uint
+Number.uint <?= Number.uint
+nat <?= nat
+nat <?= nat
+0 <?= X
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+0 <?= ?X
+nat <?= nat
+nat <?= nat
+nat <?= nat
+0 =<= X (App-FO) ERR
+_0 =<= X (Cons-DeltaNotStuckR) OK
+__?X =<= 0 (Meta-Inst) OK
+___nat =<= nat (Reduce-Same) OK
+Decimal.uint <?= Decimal.uint
+Decimal.uint <?= Decimal.uint
+Number.uint <?= Number.uint
+Decimal.uint <?= Decimal.uint
+Decimal.uint <?= Decimal.uint
+Number.uint <?= Number.uint
+nat <?= nat
+nat <?= nat
+X =?= 0
+nat <?= nat
+nat <?= nat
+X =?= 0 (App-FO) ERR
+File "./test-suite/munifytest.v", line 40, characters 7-17:
+The command has indeed failed with message:
+Tactic failure: Unification failed.
+Decimal.uint <?= Decimal.uint
+Decimal.uint <?= Decimal.uint
+Number.uint <?= Number.uint
+Decimal.uint <?= Decimal.uint
+Decimal.uint <?= Decimal.uint
+Number.uint <?= Number.uint
+nat <?= nat
+nat <?= nat
+0 =?= X
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+0 =?= 0
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+0 =?= X (App-FO) ERR
+_0 =?= X (Cons-DeltaNotStuckR) OK
+__0 =?= 0 (App-FO) OK
+___0 =?= 0 (Rigid-Same) OK
+Decimal.uint <?= Decimal.uint
+Decimal.uint <?= Decimal.uint
+Number.uint <?= Number.uint
+Decimal.uint <?= Decimal.uint
+Decimal.uint <?= Decimal.uint
+Number.uint <?= Number.uint
+Decimal.uint <?= Decimal.uint
+Decimal.uint <?= Decimal.uint
+Number.uint <?= Number.uint
+Decimal.uint <?= Decimal.uint
+Decimal.uint <?= Decimal.uint
+Number.uint <?= Number.uint
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+(S ?n) =?= (1 + 0)
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+(S ?n) =?= (S
+   ((fix add (n m : nat) {struct n} : nat :=
+       match n with
+       | 0 => m
+       | S p => S (add p m)
+       end)
+      0 0))
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+(nat -> nat) <?= nat
+(nat -> nat) =<= nat (App-FO) ERR
+(nat -> nat) <?= nat
+(nat -> nat) =<= nat (App-FO) ERR
+(nat -> nat) <?= nat
+(nat -> nat) =<= nat (App-FO) ERR
+(nat -> nat) <?= nat
+(nat -> nat) =<= nat (App-FO) ERR
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+?n =?= ((fix add (n m : nat) {struct n} : nat :=
+    match n with
+    | 0 => m
+    | S p => S (add p m)
+    end)
+   0 0)
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+(S ?n) =?= (1 + 0) (Cons-DeltaNotStuckR) OK
+_(S ?n) =?= (S
+   ((fix add (n m : nat) \{struct n\} : nat :=
+       match n with
+       | 0 => m
+       | S p => S (add p m)
+       end)
+      0 0)) (App-FO) OK
+__S =?= S (Rigid-Same) OK
+__?n =?= ((fix add (n m : nat) \{struct n\} : nat :=
+    match n with
+    | 0 => m
+    | S p => S (add p m)
+    end)
+   0 0) (Meta-Inst) OK
+___nat =<= nat (Reduce-Same) OK
+Decimal.uint <?= Decimal.uint
+Decimal.uint <?= Decimal.uint
+Number.uint <?= Number.uint
+Decimal.uint <?= Decimal.uint
+Decimal.uint <?= Decimal.uint
+Number.uint <?= Number.uint
+Decimal.uint <?= Decimal.uint
+Decimal.uint <?= Decimal.uint
+Number.uint <?= Number.uint
+Decimal.uint <?= Decimal.uint
+Decimal.uint <?= Decimal.uint
+Number.uint <?= Number.uint
+nat <?= nat
+nat <?= nat
+nat <?= ?T
+Set <?= Type
+?T =<= nat (Meta-Inst) OK
+_Set =<= Type (Reduce-Same) OK
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+(S ?n) =?= (0 + (fun x : nat => x) 1)
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+(S ?n) =?= 1
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+(nat -> nat) <?= nat
+(nat -> nat) =<= nat (App-FO) ERR
+(nat -> nat) <?= nat
+(nat -> nat) =<= nat (App-FO) ERR
+(nat -> nat) <?= nat
+(nat -> nat) =<= nat (App-FO) ERR
+(nat -> nat) <?= nat
+(nat -> nat) =<= nat (App-FO) ERR
+nat <?= nat
+nat <?= nat
+?n =?= 0
+nat <?= nat
+nat <?= nat
+nat <?= nat
+(S ?n) =?= (0 + (fun x : nat => x) 1) (Cons-DeltaNotStuckR) OK
+_(S ?n) =?= 1 (App-FO) OK
+__S =?= S (Rigid-Same) OK
+__?n =?= 0 (Meta-Inst) OK
+___nat =<= nat (Reduce-Same) OK
+Decimal.uint <?= Decimal.uint
+Decimal.uint <?= Decimal.uint
+Number.uint <?= Number.uint
+Decimal.uint <?= Decimal.uint
+Decimal.uint <?= Decimal.uint
+Number.uint <?= Number.uint
+Decimal.uint <?= Decimal.uint
+Decimal.uint <?= Decimal.uint
+Number.uint <?= Number.uint
+Decimal.uint <?= Decimal.uint
+Decimal.uint <?= Decimal.uint
+Number.uint <?= Number.uint
+Decimal.uint <?= Decimal.uint
+Decimal.uint <?= Decimal.uint
+Number.uint <?= Number.uint
+Decimal.uint <?= Decimal.uint
+Decimal.uint <?= Decimal.uint
+Number.uint <?= Number.uint
+nat <?= nat
+nat <?= nat
+nat <?= ?T
+Set <?= Type
+?T =<= nat (Meta-Inst) OK
+_Set =<= Type (Reduce-Same) OK
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+(0 + (fun x : nat => x) 1) =?= 1
+File "./test-suite/munifytest.v", line 44, characters 7-34:
+The command has indeed failed with message:
+Tactic failure: Unification failed.
+Decimal.uint <?= Decimal.uint
+Decimal.uint <?= Decimal.uint
+Number.uint <?= Number.uint
+Decimal.uint <?= Decimal.uint
+Decimal.uint <?= Decimal.uint
+Number.uint <?= Number.uint
+nat <?= nat
+nat <?= nat
+?y =?= 0
+nat <?= nat
+nat <?= nat
+nat <?= ?T
+Set <?= Type
+?y =?= 0 (Meta-Inst) OK
+_?T =<= nat (Meta-Inst) OK
+__Set =<= Type (Reduce-Same) OK
+Decimal.uint <?= Decimal.uint
+Decimal.uint <?= Decimal.uint
+Number.uint <?= Number.uint
+Decimal.uint <?= Decimal.uint
+Decimal.uint <?= Decimal.uint
+Number.uint <?= Number.uint
+nat <?= ?T
+Set <?= Type
+?T =<= nat (Meta-Inst) OK
+_Set =<= Type (Reduce-Same) OK
+nat <?= nat
+nat <?= nat
+(?y X) =?= 0
+nat <?= nat
+nat <?= nat
+(nat -> nat) <?= (forall x0 : nat, ?T)
+nat =?= nat
+nat <?= ?T@{x0:=n}
+Set <?= Type
+(?y X) =?= 0 (Meta-Inst) OK
+_(nat -> nat) =<= (forall x0 : nat, ?T) (App-FO) OK
+__(nat -> nat) =<= (forall x0 : nat, ?T) (Prod-Same) OK
+___nat =?= nat (Reduce-Same) OK
+___?T@\{x0:=n\} =<= nat (Meta-Inst) OK
+____Set =<= Type (Reduce-Same) OK
+nat <?= ?T
+Set <?= Type
+?T =<= nat (Meta-Inst) OK
+_Set =<= Type (Reduce-Same) OK
+nat <?= ?T@{X:=X; x0:=X}
+Set <?= Type
+?T@\{X:=X; x0:=X\} =<= nat (Meta-Inst) OK
+_Set =<= Type (Reduce-Same) OK
+(?y X X) =?= X
+(?y X X) =?= X
+nat <?= nat
+nat <?= nat
+(?y X X) =?= 0
+nat <?= nat
+nat <?= nat
+(nat -> nat -> nat) <?= (forall x0 x1 : nat, ?T)
+nat =?= nat
+(nat -> nat) <?= (forall x1 : nat, ?T@{x0:=n})
+nat =?= nat
+nat <?= ?T@{x0:=n; x1:=n}
+Set <?= Type
+(?y X X) =?= X (Meta-Inst) ERR
+_(?y X X) =?= X (Meta-DelDeps) ERR
+_(?y X X) =?= X (Meta-Reduce) OK
+__(?y X X) =?= 0 (Meta-Inst) OK
+___(nat -> nat -> nat) =<= (forall x0 x1 : nat, ?T) (App-FO) OK
+____(nat -> nat -> nat) =<= (forall x0 x1 : nat, ?T) (Prod-Same) OK
+_____nat =?= nat (Reduce-Same) OK
+_____(nat -> nat) =<= (forall x1 : nat, ?T@\{x0:=n\}) (App-FO) OK
+______(nat -> nat) =<= (forall x1 : nat, ?T@\{x0:=n\}) (Prod-Same) OK
+_______nat =?= nat (Reduce-Same) OK
+_______?T@\{x0:=n; x1:=n\} =<= nat (Meta-Inst) OK
+________Set =<= Type (Reduce-Same) OK
+nat <?= ?T
+Set <?= Type
+?T =<= nat (Meta-Inst) OK
+_Set =<= Type (Reduce-Same) OK
+nat <?= ?T@{x:=x; x0:=x}
+Set <?= Type
+?T@\{x:=x; x0:=x\} =<= nat (Meta-Inst) OK
+_Set =<= Type (Reduce-Same) OK
+(?y x x) =?= ?y0
+(?y0 x x) =?= ?y
+(?y x x) =?= ?y0 (Meta-Inst) ERR
+_(?y0 x x) =?= ?y (Meta-DelDeps) ERR
+File "./test-suite/munifytest.v", line 48, characters 7-23:
+The command has indeed failed with message:
+Tactic failure: Unification failed.
+nat <?= ?T
+Set <?= Type
+?T =<= nat (Meta-Inst) OK
+_Set =<= Type (Reduce-Same) OK
+nat <?= ?T@{x:=x; x0:=x}
+Set <?= Type
+?T@\{x:=x; x0:=x\} =<= nat (Meta-Inst) OK
+_Set =<= Type (Reduce-Same) OK
+(?y x x) <?= ?y0
+?T@{x:=x; x0:=x; x1:=x} <?= ?T0
+?y0 =<= (?y x x) (Meta-Inst) OK
+_?T@\{x:=x; x0:=x; x1:=x\} =<= ?T0 (Meta-Inst) ERR
+_?T0 =<= ?T@\{x:=x; x0:=x; x1:=x\} (Meta-Inst) OK
+True <?= True
+nat <?= ?T
+Set <?= Type
+?T@{x:=x; y:=x} <?= ?A
+nat <?= ?T@{x:=x; y:=x}
+Set <?= Type
+(?x = ?x) <?= ((fun y : nat => ?n) x = x)
+?A =?= nat
+Set <?= Type
+?x =?= ((fun y : nat => ?n) x)
+nat <?= nat
+?n@{x:=x; y:=x} =?= x
+?n@{y:=x} =?= x
+nat <?= nat
+aggressive_double_var =
+fun x : nat => eq_refl
+     : forall x : nat, (fun y : nat => y) x = x
+
+Arguments aggressive_double_var x%_nat_scope
+nat <?= ?T
+Set <?= Type
+nat <?= ?T@{x:=x; z:=x}
+Set <?= Type
+?T@{x:=x; y:=y; z:=x; x0:=y} <?= ?A
+nat <?= nat
+nat <?= nat
+nat <?= ?T@{x:=x; y:=y; z:=x; x0:=y}
+Set <?= Type
+(?x = ?x) <?= ((fun z : nat => ?n) x y = x + y)
+?A =?= nat
+Set <?= Type
+?x =?= ((fun z : nat => ?n) x y)
+nat <?= nat
+(?n@{x:=x; z:=x} y) =?= (x + y)
+?n@{x:=x; z:=x} =?= (Nat.add x)
+?n@{z:=x} =?= (Nat.add x)
+(nat -> nat) <?= (nat -> nat)
+y =?= y
+aggressive_double_var' =
+fun x y : nat => eq_refl
+     : forall x y : nat, (fun z : nat => Nat.add z) x y = x + y
+
+Arguments aggressive_double_var' (x y)%_nat_scope
+Decimal.uint <?= Decimal.uint
+Decimal.uint <?= Decimal.uint
+Number.uint <?= Number.uint
+nat <?= ?T
+Set <?= Type
+nat <?= ?T@{x:=x; u:=x}
+Set <?= Type
+nat <?= nat
+nat <?= nat
+nat <?= ?T@{x:=x; u:=x; v:=0}
+nat <?= ?T0@{u:=x}
+Set <?= Type
+nat <?= nat
+nat <?= nat
+?T@{x:=x; y:=y; u:=x; v:=0; w:=y} <?= ?A
+nat <?= nat
+nat <?= nat
+nat <?= ?T@{x:=x; y:=y; u:=x; v:=0; w:=y}
+nat <?= ?T@{u:=x; w:=y}
+Set <?= Type
+nat <?= nat
+nat <?= nat
+(?x = ?x) <?= ((fun u v w : nat => ?n) x 0 y = x)
+?A =?= nat
+Set <?= Type
+nat <?= nat
+nat <?= nat
+?x =?= ((fun u v w : nat => ?n) x 0 y)
+nat <?= nat
+nat <?= nat
+nat <?= nat
+?n@{x:=x; y:=y; u:=x; v:=0; w:=y} =?= x
+?n@{u:=x; w:=y} =?= x
+nat <?= nat
+nat <?= nat
+nat <?= nat
+aggressive_const =
+fun x _ _ : nat => eq_refl
+     : forall x y : nat, nat -> (fun u _ _ : nat => u) x 0 y = x
+
+Arguments aggressive_const (x y z)%_nat_scope
+Decimal.uint <?= Decimal.uint
+Decimal.uint <?= Decimal.uint
+Number.uint <?= Number.uint
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+?T@{x:=x; y:=y; u:=0; v:=x; w:=y} <?= ?A
+nat <?= nat
+nat <?= nat
+?A =<= ?T@\{x:=x; y:=y; u:=0; v:=x; w:=y\} (Meta-Inst) OK
+nat <?= nat
+nat <?= nat
+nat <?= ?T@{x:=x; y:=y; u:=0; v:=x; w:=y}
+nat <?= ?T@{v:=x; w:=y}
+Set <?= Type
+?T@\{v:=x; w:=y\} =<= nat (Meta-DelDeps) OK
+_?T@\{v:=x; w:=y\} =<= nat (Meta-Inst) OK
+__Set =<= Type (Reduce-Same) OK
+nat <?= nat
+nat <?= nat
+(?x = ?x) <?= ((fun u v w : nat => ?n) 0 x y = x)
+nat <?= nat
+nat <?= nat
+?A =?= nat
+Set <?= Type
+nat <?= nat
+nat <?= nat
+?x =?= ((fun u v w : nat => ?n) 0 x y)
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+?n@{x:=x; y:=y; u:=0; v:=x; w:=y} =?= x
+?n@{v:=x; w:=y} =?= x
+nat <?= nat
+(?x = ?x) =<= ((fun u v w : nat => ?n) 0 x y = x) (App-FO) OK
+_@eq =<= @eq (Rigid-Same) OK
+_?A =?= nat (Meta-Inst) OK
+__Set =<= Type (Reduce-Same) OK
+_?x =?= ((fun u v w : nat => ?n) 0 x y) (Meta-Inst) OK
+__nat =<= nat (Reduce-Same) OK
+_?n@\{v:=x; w:=y\} =?= x (Meta-DelDeps) OK
+__?n@\{v:=x; w:=y\} =?= x (Meta-Inst) OK
+___nat =<= nat (Reduce-Same) OK
+nat <?= nat
+nat <?= nat
+aggressive_const' =
+fun x _ _ : nat => eq_refl
+     : forall x y : nat, nat -> (fun _ v _ : nat => v) 0 x y = x
+
+Arguments aggressive_const' (x y z)%_nat_scope
+Decimal.uint <?= Decimal.uint
+Decimal.uint <?= Decimal.uint
+Number.uint <?= Number.uint
+nat <?= ?T
+Set <?= Type
+?T =<= nat (Meta-Inst) OK
+_Set =<= Type (Reduce-Same) OK
+nat <?= ?T@{y:=y; u:=y}
+Set <?= Type
+?T@\{y:=y; u:=y\} =<= nat (Meta-Inst) OK
+_Set =<= Type (Reduce-Same) OK
+nat <?= ?T@{x:=x; y:=y; u:=y; v:=x}
+Set <?= Type
+?T@\{x:=x; y:=y; u:=y; v:=x\} =<= nat (Meta-Inst) OK
+_Set =<= Type (Reduce-Same) OK
+nat <?= nat
+nat <?= nat
+?T@{x:=x; y:=y; u:=y; v:=x; w:=0} <?= ?A
+nat <?= nat
+nat <?= nat
+?A =<= ?T@\{x:=x; y:=y; u:=y; v:=x; w:=0\} (Meta-Inst) OK
+nat <?= nat
+nat <?= nat
+nat <?= ?T@{x:=x; y:=y; u:=y; v:=x; w:=0}
+nat <?= ?T@{u:=y; v:=x}
+Set <?= Type
+?T@\{u:=y; v:=x\} =<= nat (Meta-DelDeps) OK
+_?T@\{u:=y; v:=x\} =<= nat (Meta-Inst) OK
+__Set =<= Type (Reduce-Same) OK
+nat <?= nat
+nat <?= nat
+(?x = ?x) <?= ((fun u v w : nat => ?n) y x 0 = x)
+nat <?= nat
+nat <?= nat
+?A =?= nat
+Set <?= Type
+nat <?= nat
+nat <?= nat
+?x =?= ((fun u v w : nat => ?n) y x 0)
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+?n@{x:=x; y:=y; u:=y; v:=x; w:=0} =?= x
+?n@{u:=y; v:=x} =?= x
+nat <?= nat
+(?x = ?x) =<= ((fun u v w : nat => ?n) y x 0 = x) (App-FO) OK
+_@eq =<= @eq (Rigid-Same) OK
+_?A =?= nat (Meta-Inst) OK
+__Set =<= Type (Reduce-Same) OK
+_?x =?= ((fun u v w : nat => ?n) y x 0) (Meta-Inst) OK
+__nat =<= nat (Reduce-Same) OK
+_?n@\{u:=y; v:=x\} =?= x (Meta-DelDeps) OK
+__?n@\{u:=y; v:=x\} =?= x (Meta-Inst) OK
+___nat =<= nat (Reduce-Same) OK
+nat <?= nat
+nat <?= nat
+aggressive_const'' =
+fun x _ _ : nat => eq_refl
+     : forall x y : nat, nat -> (fun _ v _ : nat => v) y x 0 = x
+
+Arguments aggressive_const'' (x y z)%_nat_scope
+Type <?= Type
+?T <?= Type
+Type <?= Type
+?T =<= Type (Meta-Inst) OK
+_Type =<= Type (Reduce-Same) OK
+B <?= B
+B <?= B
+B <?= ?A
+Type <?= Type
+?A =<= B (Meta-Inst) OK
+_Type =<= Type (Reduce-Same) OK
+B <?= B
+Prop <?= Prop
+(B -> Prop) <?= (B -> Prop)
+(B -> B -> Prop) <?= (B -> B -> Prop)
+Prop <?= Prop
+((forall B : Type, (B -> B -> Prop) -> Prop) -> Prop) <?= ((forall B : Type, (B -> B -> Prop) -> Prop) -> Prop)
+?T0 <?= ?A
+?A =<= ?T0 (Meta-Inst) OK
+?T1 <?= ?T0
+?T1 =<= ?T0 (Meta-Inst) OK
+?T <?= A
+Type <?= Type
+?T =<= A (Meta-Inst) OK
+_Type =<= Type (Reduce-Same) OK
+B <?= ?T
+Type <?= Type
+?T =<= B (Meta-Inst) OK
+_Type =<= Type (Reduce-Same) OK
+A <?= A
+B <?= ?T@{x:=f1 x1}
+B <?= ?T0
+Type <?= Type
+?T0 =<= B (Meta-DelDeps) OK
+_?T0 =<= B (Meta-Inst) OK
+__Type =<= Type (Reduce-Same) OK
+?T@{x:=f1 x1; x0:=f2 x2} <?= Prop
+?T <?= Prop
+Type <?= Type
+?T =<= Prop (Meta-DelDeps) OK
+_?T =<= Prop (Meta-Inst) OK
+__Type =<= Type (Reduce-Same) OK
+nat <?= nat
+?T <?= Type
+Type <?= Type
+?T =<= Type (Meta-Inst) OK
+_Type =<= Type (Reduce-Same) OK
+Type <?= Type
+(B -> B -> Prop) <?= (B -> B -> Prop)
+((A -> B) -> (A -> B) -> Prop) <?= (?B -> ?B -> Prop)
+(A -> B) =?= ?B
+Type <?= Type
+((A -> B) -> Prop) <?= ((A -> B) -> Prop)
+((A -> B) -> (A -> B) -> Prop) =<= (?B -> ?B -> Prop) (App-FO) OK
+_((A -> B) -> (A -> B) -> Prop) =<= (?B -> ?B -> Prop) (Prod-Same) OK
+__?B =?= (A -> B) (Meta-Inst) OK
+___Type =<= Type (Reduce-Same) OK
+__((A -> B) -> Prop) =<= ((A -> B) -> Prop) (Reduce-Same) OK
+Prop <?= Prop
+((B -> B -> Prop) -> Prop) <?= ((B -> B -> Prop) -> Prop)
+(forall B : Type, (B -> B -> Prop) -> Prop) <?= (forall B : Type, (B -> B -> Prop) -> Prop)
+Prop <?= Prop
+((forall B : Type, (B -> B -> Prop) -> Prop) -> Prop) <?= ((forall B : Type, (B -> B -> Prop) -> Prop) -> Prop)
+((forall B : Type, (B -> B -> Prop) -> Prop) -> Prop) <?= ((forall B : Type, (B -> B -> Prop) -> Prop) -> Prop)
+(nat -> nat) <?= (nat -> nat)
+(nat -> nat -> nat) <?= (nat -> nat -> nat)
+(nat -> nat -> nat -> nat) <?= (nat -> nat -> nat -> nat)
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= ?A
+Set <?= Type
+?A =<= nat (Meta-Inst) OK
+_Set =<= Type (Reduce-Same) OK
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+Prop <?= Prop
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= ?A
+Set <?= Type
+?A =<= nat (Meta-Inst) OK
+_Set =<= Type (Reduce-Same) OK
+nat <?= nat
+Prop <?= Prop
+nat <?= nat
+nat <?= nat
+nat <?= nat
+(?x = ?x) <?= ?A
+Prop <?= Prop
+?A =<= (?x = ?x) (Meta-Inst) OK
+_Prop =<= Prop (Reduce-Same) OK
+(?x0 = ?x0) <?= ?B
+Prop <?= Prop
+?B =<= (?x0 = ?x0) (Meta-Inst) OK
+_Prop =<= Prop (Reduce-Same) OK
+(?x = ?x /\ ?x0 = ?x0) <?= ((fun x y z : nat => ?n) x y z = (fun x y z : nat => ?n) y y x /\
+ (fun x y z : nat => ?n) x y z = y)
+(?x = ?x) =?= ((fun x y z : nat => ?n) x y z = (fun x y z : nat => ?n) y y x)
+?A =?= nat
+Set <?= Type
+?x =?= ((fun x y z : nat => ?n) x y z)
+nat <?= nat
+?n =?= ((fun x y z : nat => ?n) y y x)
+?n =?= ?n@{x:=y; y:=y; z:=x}
+(?x = ?x) =?= ((fun _ y _ : nat => ?n) x y z = y)
+?A =?= nat
+Set <?= Type
+?x =?= ((fun _ y _ : nat => ?n) x y z)
+nat <?= nat
+?n =?= y
+nat <?= nat
+(?x = ?x /\\ ?x0 = ?x0) =<= ((fun x y z : nat => ?n) x y z = (fun x y z : nat => ?n) y y x /\\
+ (fun x y z : nat => ?n) x y z = y) (App-FO) OK
+_and =<= and (Rigid-Same) OK
+_(?x = ?x) =?= ((fun x y z : nat => ?n) x y z = (fun x y z : nat => ?n) y y x) (App-FO) OK
+__@eq =?= @eq (Rigid-Same) OK
+__?A =?= nat (Meta-Inst) OK
+___Set =<= Type (Reduce-Same) OK
+__?x =?= ((fun x y z : nat => ?n) x y z) (Meta-Inst) OK
+___nat =<= nat (Reduce-Same) OK
+__?n =?= ((fun x y z : nat => ?n) y y x) (Meta-Inst) ERR
+__?n =?= ((fun x y z : nat => ?n) y y x) (Meta-Reduce) OK
+___?n =?= ?n (Meta-Same) OK
+_(?x = ?x) =?= ((fun _ y _ : nat => ?n) x y z = y) (App-FO) OK
+__@eq =?= @eq (Rigid-Same) OK
+__?A =?= nat (Meta-Inst) OK
+___Set =<= Type (Reduce-Same) OK
+__?x =?= ((fun _ y _ : nat => ?n) x y z) (Meta-Inst) OK
+___nat =<= nat (Reduce-Same) OK
+__?n =?= y (Meta-Inst) OK
+___nat =<= nat (Reduce-Same) OK
+(forall z : nat,
+ (fun _ y _ : nat => y) x y z = (fun _ y _ : nat => y) y y x /\
+ (fun _ y _ : nat => y) x y z = y) <?= (forall z : nat,
+ (fun _ y _ : nat => y) x y z = (fun _ y _ : nat => y) y y x /\
+ (fun _ y _ : nat => y) x y z = y)
+(forall y z : nat,
+ (fun _ y0 _ : nat => y0) x y z = (fun _ y0 _ : nat => y0) y y x /\
+ (fun _ y0 _ : nat => y0) x y z = y) <?= (forall y z : nat,
+ (fun _ y0 _ : nat => y0) x y z = (fun _ y0 _ : nat => y0) y y x /\
+ (fun _ y0 _ : nat => y0) x y z = y)
+(forall x y z : nat,
+ (fun _ y0 _ : nat => y0) x y z = (fun _ y0 _ : nat => y0) y y x /\
+ (fun _ y0 _ : nat => y0) x y z = y) <?= (let T := fun _ y _ : nat => y in
+ forall x y z : nat, T x y z = T y y x /\ T x y z = y)
+Decimal.uint <?= Decimal.uint
+Decimal.uint <?= Decimal.uint
+Number.uint <?= Number.uint
+(nat -> nat) <?= (nat -> nat)
+(nat -> nat -> nat) <?= (nat -> nat -> nat)
+(nat -> nat -> nat -> nat) <?= (nat -> nat -> nat -> nat)
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= ?A
+Set <?= Type
+?A =<= nat (Meta-Inst) OK
+_Set =<= Type (Reduce-Same) OK
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+Prop <?= Prop
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= ?A
+Set <?= Type
+?A =<= nat (Meta-Inst) OK
+_Set =<= Type (Reduce-Same) OK
+nat <?= nat
+Prop <?= Prop
+nat <?= nat
+nat <?= nat
+nat <?= nat
+(?x = ?x) <?= ?A
+Prop <?= Prop
+?A =<= (?x = ?x) (Meta-Inst) OK
+_Prop =<= Prop (Reduce-Same) OK
+(?x0 = ?x0) <?= ?B
+Prop <?= Prop
+?B =<= (?x0 = ?x0) (Meta-Inst) OK
+_Prop =<= Prop (Reduce-Same) OK
+nat <?= nat
+nat <?= nat
+(?x = ?x /\ ?x0 = ?x0) <?= ((fun x y z : nat => ?n) x x x = (fun x y z : nat => ?n) y y y /\
+ (fun x y z : nat => ?n) x y z = 0)
+nat <?= nat
+nat <?= nat
+(?x = ?x) =?= ((fun x y z : nat => ?n) x x x = (fun x y z : nat => ?n) y y y)
+?A =?= nat
+Set <?= Type
+?x =?= ((fun x y z : nat => ?n) x x x)
+nat <?= nat
+?n@{x:=x; y:=x; z:=x} =?= ((fun x y z : nat => ?n) y y y)
+?n@{z:=x} =?= ((fun _ _ z : nat => ?n) y y y)
+?n@{z:=x} =?= ?n@{z:=y}
+nat <?= nat
+nat <?= nat
+(?x = ?x) =?= ((fun _ _ _ : nat => ?n) x y z = 0)
+nat <?= nat
+nat <?= nat
+?A =?= nat
+Set <?= Type
+?x =?= ((fun _ _ _ : nat => ?n) x y z)
+nat <?= nat
+nat <?= nat
+nat <?= nat
+?n =?= 0
+nat <?= nat
+nat <?= nat
+nat <?= nat
+(?x = ?x /\\ ?x0 = ?x0) =<= ((fun x y z : nat => ?n) x x x = (fun x y z : nat => ?n) y y y /\\
+ (fun x y z : nat => ?n) x y z = 0) (App-FO) OK
+_and =<= and (Rigid-Same) OK
+_(?x = ?x) =?= ((fun x y z : nat => ?n) x x x = (fun x y z : nat => ?n) y y y) (App-FO) OK
+__@eq =?= @eq (Rigid-Same) OK
+__?A =?= nat (Meta-Inst) OK
+___Set =<= Type (Reduce-Same) OK
+__?x =?= ((fun x y z : nat => ?n) x x x) (Meta-Inst) OK
+___nat =<= nat (Reduce-Same) OK
+__?n@\{x:=x; y:=x; z:=x\} =?= ((fun x y z : nat => ?n) y y y) (Meta-Inst) ERR
+__?n@\{z:=x\} =?= ((fun _ _ z : nat => ?n) y y y) (Meta-DelDeps) OK
+___?n@\{z:=x\} =?= ((fun _ _ z : nat => ?n) y y y) (Meta-Inst) ERR
+___?n@\{z:=x\} =?= ((fun _ _ z : nat => ?n) y y y) (Meta-Reduce) OK
+____?n =?= ?n (Meta-Same) OK
+_(?x = ?x) =?= ((fun _ _ _ : nat => ?n) x y z = 0) (App-FO) OK
+__@eq =?= @eq (Rigid-Same) OK
+__?A =?= nat (Meta-Inst) OK
+___Set =<= Type (Reduce-Same) OK
+__?x =?= ((fun _ _ _ : nat => ?n) x y z) (Meta-Inst) OK
+___nat =<= nat (Reduce-Same) OK
+__?n =?= 0 (Meta-Inst) OK
+___nat =<= nat (Reduce-Same) OK
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+(forall z : nat,
+ (fun _ _ _ : nat => 0) x x x = (fun _ _ _ : nat => 0) y y y /\
+ (fun _ _ _ : nat => 0) x y z = 0) <?= (forall z : nat,
+ (fun _ _ _ : nat => 0) x x x = (fun _ _ _ : nat => 0) y y y /\
+ (fun _ _ _ : nat => 0) x y z = 0)
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+(forall y z : nat,
+ (fun _ _ _ : nat => 0) x x x = (fun _ _ _ : nat => 0) y y y /\
+ (fun _ _ _ : nat => 0) x y z = 0) <?= (forall y z : nat,
+ (fun _ _ _ : nat => 0) x x x = (fun _ _ _ : nat => 0) y y y /\
+ (fun _ _ _ : nat => 0) x y z = 0)
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+(forall x y z : nat,
+ (fun _ _ _ : nat => 0) x x x = (fun _ _ _ : nat => 0) y y y /\
+ (fun _ _ _ : nat => 0) x y z = 0) <?= (let T := fun _ _ _ : nat => 0 in
+ forall x y z : nat, T x x x = T y y y /\ T x y z = 0)
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+(nat -> nat) <?= (nat -> nat)
+(nat -> nat -> nat) <?= (nat -> nat -> nat)
+(nat -> nat -> nat -> nat) <?= (nat -> nat -> nat -> nat)
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= ?A
+Set <?= Type
+?A =<= nat (Meta-Inst) OK
+_Set =<= Type (Reduce-Same) OK
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+Prop <?= Prop
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= ?A
+Set <?= Type
+?A =<= nat (Meta-Inst) OK
+_Set =<= Type (Reduce-Same) OK
+nat <?= nat
+Prop <?= Prop
+nat <?= nat
+nat <?= nat
+nat <?= nat
+(?x = ?x) <?= ?A
+Prop <?= Prop
+?A =<= (?x = ?x) (Meta-Inst) OK
+_Prop =<= Prop (Reduce-Same) OK
+(?x0 = ?x0) <?= ?B
+Prop <?= Prop
+?B =<= (?x0 = ?x0) (Meta-Inst) OK
+_Prop =<= Prop (Reduce-Same) OK
+(?x = ?x /\ ?x0 = ?x0) <?= ((fun x y z : nat => ?n) x y z = (fun x y z : nat => ?n) y y x /\
+ (fun x y z : nat => ?n) x y z = x)
+(?x = ?x) =?= ((fun x y z : nat => ?n) x y z = (fun x y z : nat => ?n) y y x)
+?A =?= nat
+Set <?= Type
+?x =?= ((fun x y z : nat => ?n) x y z)
+nat <?= nat
+?n =?= ((fun x y z : nat => ?n) y y x)
+?n =?= ?n@{x:=y; y:=y; z:=x}
+(?x = ?x) =?= ((fun _ y _ : nat => ?n) x y z = x)
+?A =?= nat
+Set <?= Type
+?x =?= ((fun _ y _ : nat => ?n) x y z)
+nat <?= nat
+?n =?= x
+(?x = ?x /\\ ?x0 = ?x0) =<= ((fun x y z : nat => ?n) x y z = (fun x y z : nat => ?n) y y x /\\
+ (fun x y z : nat => ?n) x y z = x) (App-FO) ERR
+_and =<= and (Rigid-Same) OK
+_(?x = ?x) =?= ((fun x y z : nat => ?n) x y z = (fun x y z : nat => ?n) y y x) (App-FO) OK
+__@eq =?= @eq (Rigid-Same) OK
+__?A =?= nat (Meta-Inst) OK
+___Set =<= Type (Reduce-Same) OK
+__?x =?= ((fun x y z : nat => ?n) x y z) (Meta-Inst) OK
+___nat =<= nat (Reduce-Same) OK
+__?n =?= ((fun x y z : nat => ?n) y y x) (Meta-Inst) ERR
+__?n =?= ((fun x y z : nat => ?n) y y x) (Meta-Reduce) OK
+___?n =?= ?n (Meta-Same) OK
+_(?x = ?x) =?= ((fun _ y _ : nat => ?n) x y z = x) (App-FO) ERR
+__@eq =?= @eq (Rigid-Same) OK
+__?A =?= nat (Meta-Inst) OK
+___Set =<= Type (Reduce-Same) OK
+__?x =?= ((fun _ y _ : nat => ?n) x y z) (Meta-Inst) OK
+___nat =<= nat (Reduce-Same) OK
+__?n =?= x (Meta-Inst) ERR
+(?x = ?x /\ ?x0 = ?x0) <?= ((fun x y z : nat => ?n) x y z = (fun x y z : nat => ?n) y y x /\
+ (fun x y z : nat => ?n) x y z = x)
+(?x = ?x) =?= ((fun x y z : nat => ?n) x y z = (fun x y z : nat => ?n) y y x)
+?A =?= nat
+Set <?= Type
+?x =?= ((fun x y z : nat => ?n) x y z)
+nat <?= nat
+?n =?= ((fun x y z : nat => ?n) y y x)
+?n =?= ?n@{x:=y; y:=y; z:=x}
+(?x = ?x) =?= ((fun _ y _ : nat => ?n) x y z = x)
+?A =?= nat
+Set <?= Type
+?x =?= ((fun _ y _ : nat => ?n) x y z)
+nat <?= nat
+?n =?= x
+(?x = ?x /\\ ?x0 = ?x0) =<= ((fun x y z : nat => ?n) x y z = (fun x y z : nat => ?n) y y x /\\
+ (fun x y z : nat => ?n) x y z = x) (App-FO) ERR
+_and =<= and (Rigid-Same) OK
+_(?x = ?x) =?= ((fun x y z : nat => ?n) x y z = (fun x y z : nat => ?n) y y x) (App-FO) OK
+__@eq =?= @eq (Rigid-Same) OK
+__?A =?= nat (Meta-Inst) OK
+___Set =<= Type (Reduce-Same) OK
+__?x =?= ((fun x y z : nat => ?n) x y z) (Meta-Inst) OK
+___nat =<= nat (Reduce-Same) OK
+__?n =?= ((fun x y z : nat => ?n) y y x) (Meta-Inst) ERR
+__?n =?= ((fun x y z : nat => ?n) y y x) (Meta-Reduce) OK
+___?n =?= ?n (Meta-Same) OK
+_(?x = ?x) =?= ((fun _ y _ : nat => ?n) x y z = x) (App-FO) ERR
+__@eq =?= @eq (Rigid-Same) OK
+__?A =?= nat (Meta-Inst) OK
+___Set =<= Type (Reduce-Same) OK
+__?x =?= ((fun _ y _ : nat => ?n) x y z) (Meta-Inst) OK
+___nat =<= nat (Reduce-Same) OK
+__?n =?= x (Meta-Inst) ERR
+File "./test-suite/munifytest.v", line 93, characters 71-91:
+The command has indeed failed with message:
+In environment
+x : nat
+y : nat
+z : nat
+The term "conj eq_refl eq_refl" has type "?x = ?x /\ ?x0 = ?x0"
+while it is expected to have type "?n = ?n@{x:=y; y:=y; z:=x} /\ ?n = x".
+(nat -> nat) <?= (nat -> nat)
+(nat -> nat -> nat) <?= (nat -> nat -> nat)
+(nat -> nat -> nat -> nat) <?= (nat -> nat -> nat -> nat)
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= ?A
+Set <?= Type
+?A =<= nat (Meta-Inst) OK
+_Set =<= Type (Reduce-Same) OK
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+Prop <?= Prop
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= ?A
+Set <?= Type
+?A =<= nat (Meta-Inst) OK
+_Set =<= Type (Reduce-Same) OK
+nat <?= nat
+Prop <?= Prop
+nat <?= nat
+nat <?= nat
+nat <?= nat
+(?x = ?x) <?= ?A
+Prop <?= Prop
+?A =<= (?x = ?x) (Meta-Inst) OK
+_Prop =<= Prop (Reduce-Same) OK
+(?x0 = ?x0) <?= ?B
+Prop <?= Prop
+?B =<= (?x0 = ?x0) (Meta-Inst) OK
+_Prop =<= Prop (Reduce-Same) OK
+(?x = ?x /\ ?x0 = ?x0) <?= ((fun x y z : nat => ?n) x y z = (fun x y z : nat => ?n) y y x /\
+ (fun x y z : nat => ?n) x y z = x)
+(?x = ?x) =?= ((fun x y z : nat => ?n) x y z = (fun x y z : nat => ?n) y y x)
+?A =?= nat
+Set <?= Type
+?x =?= ((fun x y z : nat => ?n) x y z)
+nat <?= nat
+?n =?= ((fun x y z : nat => ?n) y y x)
+?n =?= ?n@{x:=y; y:=y; z:=x}
+(?x = ?x) =?= ((fun _ y _ : nat => ?n) x y z = x)
+?A =?= nat
+Set <?= Type
+?x =?= ((fun _ y _ : nat => ?n) x y z)
+nat <?= nat
+?n =?= x
+(?x = ?x /\\ ?x0 = ?x0) =<= ((fun x y z : nat => ?n) x y z = (fun x y z : nat => ?n) y y x /\\
+ (fun x y z : nat => ?n) x y z = x) (App-FO) ERR
+_and =<= and (Rigid-Same) OK
+_(?x = ?x) =?= ((fun x y z : nat => ?n) x y z = (fun x y z : nat => ?n) y y x) (App-FO) OK
+__@eq =?= @eq (Rigid-Same) OK
+__?A =?= nat (Meta-Inst) OK
+___Set =<= Type (Reduce-Same) OK
+__?x =?= ((fun x y z : nat => ?n) x y z) (Meta-Inst) OK
+___nat =<= nat (Reduce-Same) OK
+__?n =?= ((fun x y z : nat => ?n) y y x) (Meta-Inst) ERR
+__?n =?= ((fun x y z : nat => ?n) y y x) (Meta-Reduce) OK
+___?n =?= ?n (Meta-Same) OK
+_(?x = ?x) =?= ((fun _ y _ : nat => ?n) x y z = x) (App-FO) ERR
+__@eq =?= @eq (Rigid-Same) OK
+__?A =?= nat (Meta-Inst) OK
+___Set =<= Type (Reduce-Same) OK
+__?x =?= ((fun _ y _ : nat => ?n) x y z) (Meta-Inst) OK
+___nat =<= nat (Reduce-Same) OK
+__?n =?= x (Meta-Inst) ERR
+(?x = ?x /\ ?x0 = ?x0) <?= ((fun x y z : nat => ?n) x y z = (fun x y z : nat => ?n) y y x /\
+ (fun x y z : nat => ?n) x y z = x)
+(?x = ?x) =?= ((fun x y z : nat => ?n) x y z = (fun x y z : nat => ?n) y y x)
+?A =?= nat
+Set <?= Type
+?x =?= ((fun x y z : nat => ?n) x y z)
+nat <?= nat
+?n =?= ((fun x y z : nat => ?n) y y x)
+?n =?= ?n@{x:=y; y:=y; z:=x}
+(?x = ?x) =?= ((fun _ y _ : nat => ?n) x y z = x)
+?A =?= nat
+Set <?= Type
+?x =?= ((fun _ y _ : nat => ?n) x y z)
+nat <?= nat
+?n =?= x
+(?x = ?x /\\ ?x0 = ?x0) =<= ((fun x y z : nat => ?n) x y z = (fun x y z : nat => ?n) y y x /\\
+ (fun x y z : nat => ?n) x y z = x) (App-FO) ERR
+_and =<= and (Rigid-Same) OK
+_(?x = ?x) =?= ((fun x y z : nat => ?n) x y z = (fun x y z : nat => ?n) y y x) (App-FO) OK
+__@eq =?= @eq (Rigid-Same) OK
+__?A =?= nat (Meta-Inst) OK
+___Set =<= Type (Reduce-Same) OK
+__?x =?= ((fun x y z : nat => ?n) x y z) (Meta-Inst) OK
+___nat =<= nat (Reduce-Same) OK
+__?n =?= ((fun x y z : nat => ?n) y y x) (Meta-Inst) ERR
+__?n =?= ((fun x y z : nat => ?n) y y x) (Meta-Reduce) OK
+___?n =?= ?n (Meta-Same) OK
+_(?x = ?x) =?= ((fun _ y _ : nat => ?n) x y z = x) (App-FO) ERR
+__@eq =?= @eq (Rigid-Same) OK
+__?A =?= nat (Meta-Inst) OK
+___Set =<= Type (Reduce-Same) OK
+__?x =?= ((fun _ y _ : nat => ?n) x y z) (Meta-Inst) OK
+___nat =<= nat (Reduce-Same) OK
+__?n =?= x (Meta-Inst) ERR
+File "./test-suite/munifytest.v", line 97, characters 71-91:
+The command has indeed failed with message:
+In environment
+x : nat
+y : nat
+z : nat
+The term "conj eq_refl eq_refl" has type "?x = ?x /\ ?x0 = ?x0"
+while it is expected to have type "?n = ?n@{x:=y; y:=y; z:=x} /\ ?n = x".
+(nat -> nat) <?= (nat -> nat)
+(nat -> nat -> nat) <?= (nat -> nat -> nat)
+(nat -> nat -> nat -> nat) <?= (nat -> nat -> nat -> nat)
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= ?A
+Set <?= Type
+?A =<= nat (Meta-Inst) OK
+_Set =<= Type (Reduce-Same) OK
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+Prop <?= Prop
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= ?A
+Set <?= Type
+?A =<= nat (Meta-Inst) OK
+_Set =<= Type (Reduce-Same) OK
+nat <?= nat
+Prop <?= Prop
+nat <?= nat
+nat <?= nat
+nat <?= nat
+(?x = ?x) <?= ?A
+Prop <?= Prop
+?A =<= (?x = ?x) (Meta-Inst) OK
+_Prop =<= Prop (Reduce-Same) OK
+(?x0 = ?x0) <?= ?B
+Prop <?= Prop
+?B =<= (?x0 = ?x0) (Meta-Inst) OK
+_Prop =<= Prop (Reduce-Same) OK
+(?x = ?x /\ ?x0 = ?x0) <?= ((fun x y z : nat => ?n) x y z = (fun x y z : nat => ?n) x z z /\
+ (fun x y z : nat => ?n) x y z = x)
+(?x = ?x) =?= ((fun x y z : nat => ?n) x y z = (fun x y z : nat => ?n) x z z)
+?A =?= nat
+Set <?= Type
+?x =?= ((fun x y z : nat => ?n) x y z)
+nat <?= nat
+?n =?= ((fun x y z : nat => ?n) x z z)
+?n =?= ?n@{y:=z; z:=z}
+(?x = ?x) =?= ((fun x _ z : nat => ?n) x y z = x)
+?A =?= nat
+Set <?= Type
+?x =?= ((fun x _ z : nat => ?n) x y z)
+nat <?= nat
+?n =?= x
+nat <?= nat
+(?x = ?x /\\ ?x0 = ?x0) =<= ((fun x y z : nat => ?n) x y z = (fun x y z : nat => ?n) x z z /\\
+ (fun x y z : nat => ?n) x y z = x) (App-FO) OK
+_and =<= and (Rigid-Same) OK
+_(?x = ?x) =?= ((fun x y z : nat => ?n) x y z = (fun x y z : nat => ?n) x z z) (App-FO) OK
+__@eq =?= @eq (Rigid-Same) OK
+__?A =?= nat (Meta-Inst) OK
+___Set =<= Type (Reduce-Same) OK
+__?x =?= ((fun x y z : nat => ?n) x y z) (Meta-Inst) OK
+___nat =<= nat (Reduce-Same) OK
+__?n =?= ((fun x y z : nat => ?n) x z z) (Meta-Inst) ERR
+__?n =?= ((fun x y z : nat => ?n) x z z) (Meta-Reduce) OK
+___?n =?= ?n (Meta-Same) OK
+_(?x = ?x) =?= ((fun x _ z : nat => ?n) x y z = x) (App-FO) OK
+__@eq =?= @eq (Rigid-Same) OK
+__?A =?= nat (Meta-Inst) OK
+___Set =<= Type (Reduce-Same) OK
+__?x =?= ((fun x _ z : nat => ?n) x y z) (Meta-Inst) OK
+___nat =<= nat (Reduce-Same) OK
+__?n =?= x (Meta-Inst) OK
+___nat =<= nat (Reduce-Same) OK
+(forall z : nat,
+ (fun x _ _ : nat => x) x y z = (fun x _ _ : nat => x) x z z /\
+ (fun x _ _ : nat => x) x y z = x) <?= (forall z : nat,
+ (fun x _ _ : nat => x) x y z = (fun x _ _ : nat => x) x z z /\
+ (fun x _ _ : nat => x) x y z = x)
+(forall y z : nat,
+ (fun x _ _ : nat => x) x y z = (fun x _ _ : nat => x) x z z /\
+ (fun x _ _ : nat => x) x y z = x) <?= (forall y z : nat,
+ (fun x _ _ : nat => x) x y z = (fun x _ _ : nat => x) x z z /\
+ (fun x _ _ : nat => x) x y z = x)
+(forall x y z : nat,
+ (fun x0 _ _ : nat => x0) x y z = (fun x0 _ _ : nat => x0) x z z /\
+ (fun x0 _ _ : nat => x0) x y z = x) <?= (let T := fun x _ _ : nat => x in
+ forall x y z : nat, T x y z = T x z z /\ T x y z = x)
+(nat -> nat) <?= (nat -> nat)
+(nat -> nat -> nat) <?= (nat -> nat -> nat)
+(nat -> nat -> nat -> nat) <?= (nat -> nat -> nat -> nat)
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= ?A
+Set <?= Type
+?A =<= nat (Meta-Inst) OK
+_Set =<= Type (Reduce-Same) OK
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+Prop <?= Prop
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= ?A
+Set <?= Type
+?A =<= nat (Meta-Inst) OK
+_Set =<= Type (Reduce-Same) OK
+nat <?= nat
+Prop <?= Prop
+nat <?= nat
+nat <?= nat
+nat <?= nat
+(?x = ?x) <?= ?A
+Prop <?= Prop
+?A =<= (?x = ?x) (Meta-Inst) OK
+_Prop =<= Prop (Reduce-Same) OK
+(?x0 = ?x0) <?= ?B
+Prop <?= Prop
+?B =<= (?x0 = ?x0) (Meta-Inst) OK
+_Prop =<= Prop (Reduce-Same) OK
+(?x = ?x /\ ?x0 = ?x0) <?= ((fun x y z : nat => ?n) z y z = (fun x y z : nat => ?n) z z z /\
+ (fun x y z : nat => ?n) x y z = z)
+(?x = ?x) =?= ((fun x y z : nat => ?n) z y z = (fun x y z : nat => ?n) z z z)
+?A =?= nat
+Set <?= Type
+?x =?= ((fun x y z : nat => ?n) z y z)
+nat <?= nat
+?n@{x:=z; z:=z} =?= ((fun x y z : nat => ?n) z z z)
+?n =?= ((fun _ y z : nat => ?n) z z z)
+?n =?= ?n@{y:=z; z:=z}
+(?x = ?x) =?= ((fun _ _ z : nat => ?n) x y z = z)
+?A =?= nat
+Set <?= Type
+?x =?= ((fun _ _ z : nat => ?n) x y z)
+nat <?= nat
+?n =?= z
+nat <?= nat
+(?x = ?x /\\ ?x0 = ?x0) =<= ((fun x y z : nat => ?n) z y z = (fun x y z : nat => ?n) z z z /\\
+ (fun x y z : nat => ?n) x y z = z) (App-FO) OK
+_and =<= and (Rigid-Same) OK
+_(?x = ?x) =?= ((fun x y z : nat => ?n) z y z = (fun x y z : nat => ?n) z z z) (App-FO) OK
+__@eq =?= @eq (Rigid-Same) OK
+__?A =?= nat (Meta-Inst) OK
+___Set =<= Type (Reduce-Same) OK
+__?x =?= ((fun x y z : nat => ?n) z y z) (Meta-Inst) OK
+___nat =<= nat (Reduce-Same) OK
+__?n@\{x:=z; z:=z\} =?= ((fun x y z : nat => ?n) z z z) (Meta-Inst) ERR
+__?n =?= ((fun _ y z : nat => ?n) z z z) (Meta-DelDeps) OK
+___?n =?= ((fun _ y z : nat => ?n) z z z) (Meta-Inst) ERR
+___?n =?= ((fun _ y z : nat => ?n) z z z) (Meta-Reduce) OK
+____?n =?= ?n (Meta-Same) OK
+_(?x = ?x) =?= ((fun _ _ z : nat => ?n) x y z = z) (App-FO) OK
+__@eq =?= @eq (Rigid-Same) OK
+__?A =?= nat (Meta-Inst) OK
+___Set =<= Type (Reduce-Same) OK
+__?x =?= ((fun _ _ z : nat => ?n) x y z) (Meta-Inst) OK
+___nat =<= nat (Reduce-Same) OK
+__?n =?= z (Meta-Inst) OK
+___nat =<= nat (Reduce-Same) OK
+(forall z : nat,
+ (fun _ _ z0 : nat => z0) z y z = (fun _ _ z0 : nat => z0) z z z /\
+ (fun _ _ z0 : nat => z0) x y z = z) <?= (forall z : nat,
+ (fun _ _ z0 : nat => z0) z y z = (fun _ _ z0 : nat => z0) z z z /\
+ (fun _ _ z0 : nat => z0) x y z = z)
+(forall y z : nat,
+ (fun _ _ z0 : nat => z0) z y z = (fun _ _ z0 : nat => z0) z z z /\
+ (fun _ _ z0 : nat => z0) x y z = z) <?= (forall y z : nat,
+ (fun _ _ z0 : nat => z0) z y z = (fun _ _ z0 : nat => z0) z z z /\
+ (fun _ _ z0 : nat => z0) x y z = z)
+(forall x y z : nat,
+ (fun _ _ z0 : nat => z0) z y z = (fun _ _ z0 : nat => z0) z z z /\
+ (fun _ _ z0 : nat => z0) x y z = z) <?= (let T := fun _ _ z : nat => z in
+ forall x y z : nat, T z y z = T z z z /\ T x y z = z)
+(nat -> nat) <?= (nat -> nat)
+(nat -> nat -> nat) <?= (nat -> nat -> nat)
+(nat -> nat -> nat -> nat) <?= (nat -> nat -> nat -> nat)
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= ?A
+Set <?= Type
+?A =<= nat (Meta-Inst) OK
+_Set =<= Type (Reduce-Same) OK
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= nat
+Prop <?= Prop
+nat <?= nat
+nat <?= nat
+nat <?= nat
+nat <?= ?A
+Set <?= Type
+?A =<= nat (Meta-Inst) OK
+_Set =<= Type (Reduce-Same) OK
+nat <?= nat
+Prop <?= Prop
+nat <?= nat
+nat <?= nat
+nat <?= nat
+(?x = ?x) <?= ?A
+Prop <?= Prop
+?A =<= (?x = ?x) (Meta-Inst) OK
+_Prop =<= Prop (Reduce-Same) OK
+(?x0 = ?x0) <?= ?B
+Prop <?= Prop
+?B =<= (?x0 = ?x0) (Meta-Inst) OK
+_Prop =<= Prop (Reduce-Same) OK
+(?x = ?x /\ ?x0 = ?x0) <?= ((fun x y z : nat => ?n) x y z = (fun x y z : nat => ?n) x z z /\
+ (fun x y z : nat => ?n) x y z = y)
+(?x = ?x) =?= ((fun x y z : nat => ?n) x y z = (fun x y z : nat => ?n) x z z)
+?A =?= nat
+Set <?= Type
+?x =?= ((fun x y z : nat => ?n) x y z)
+nat <?= nat
+?n =?= ((fun x y z : nat => ?n) x z z)
+?n =?= ?n@{y:=z; z:=z}
+(?x = ?x) =?= ((fun x _ z : nat => ?n) x y z = y)
+?A =?= nat
+Set <?= Type
+?x =?= ((fun x _ z : nat => ?n) x y z)
+nat <?= nat
+?n =?= y
+(?x = ?x /\\ ?x0 = ?x0) =<= ((fun x y z : nat => ?n) x y z = (fun x y z : nat => ?n) x z z /\\
+ (fun x y z : nat => ?n) x y z = y) (App-FO) ERR
+_and =<= and (Rigid-Same) OK
+_(?x = ?x) =?= ((fun x y z : nat => ?n) x y z = (fun x y z : nat => ?n) x z z) (App-FO) OK
+__@eq =?= @eq (Rigid-Same) OK
+__?A =?= nat (Meta-Inst) OK
+___Set =<= Type (Reduce-Same) OK
+__?x =?= ((fun x y z : nat => ?n) x y z) (Meta-Inst) OK
+___nat =<= nat (Reduce-Same) OK
+__?n =?= ((fun x y z : nat => ?n) x z z) (Meta-Inst) ERR
+__?n =?= ((fun x y z : nat => ?n) x z z) (Meta-Reduce) OK
+___?n =?= ?n (Meta-Same) OK
+_(?x = ?x) =?= ((fun x _ z : nat => ?n) x y z = y) (App-FO) ERR
+__@eq =?= @eq (Rigid-Same) OK
+__?A =?= nat (Meta-Inst) OK
+___Set =<= Type (Reduce-Same) OK
+__?x =?= ((fun x _ z : nat => ?n) x y z) (Meta-Inst) OK
+___nat =<= nat (Reduce-Same) OK
+__?n =?= y (Meta-Inst) ERR
+(?x = ?x /\ ?x0 = ?x0) <?= ((fun x y z : nat => ?n) x y z = (fun x y z : nat => ?n) x z z /\
+ (fun x y z : nat => ?n) x y z = y)
+(?x = ?x) =?= ((fun x y z : nat => ?n) x y z = (fun x y z : nat => ?n) x z z)
+?A =?= nat
+Set <?= Type
+?x =?= ((fun x y z : nat => ?n) x y z)
+nat <?= nat
+?n =?= ((fun x y z : nat => ?n) x z z)
+?n =?= ?n@{y:=z; z:=z}
+(?x = ?x) =?= ((fun x _ z : nat => ?n) x y z = y)
+?A =?= nat
+Set <?= Type
+?x =?= ((fun x _ z : nat => ?n) x y z)
+nat <?= nat
+?n =?= y
+(?x = ?x /\\ ?x0 = ?x0) =<= ((fun x y z : nat => ?n) x y z = (fun x y z : nat => ?n) x z z /\\
+ (fun x y z : nat => ?n) x y z = y) (App-FO) ERR
+_and =<= and (Rigid-Same) OK
+_(?x = ?x) =?= ((fun x y z : nat => ?n) x y z = (fun x y z : nat => ?n) x z z) (App-FO) OK
+__@eq =?= @eq (Rigid-Same) OK
+__?A =?= nat (Meta-Inst) OK
+___Set =<= Type (Reduce-Same) OK
+__?x =?= ((fun x y z : nat => ?n) x y z) (Meta-Inst) OK
+___nat =<= nat (Reduce-Same) OK
+__?n =?= ((fun x y z : nat => ?n) x z z) (Meta-Inst) ERR
+__?n =?= ((fun x y z : nat => ?n) x z z) (Meta-Reduce) OK
+___?n =?= ?n (Meta-Same) OK
+_(?x = ?x) =?= ((fun x _ z : nat => ?n) x y z = y) (App-FO) ERR
+__@eq =?= @eq (Rigid-Same) OK
+__?A =?= nat (Meta-Inst) OK
+___Set =<= Type (Reduce-Same) OK
+__?x =?= ((fun x _ z : nat => ?n) x y z) (Meta-Inst) OK
+___nat =<= nat (Reduce-Same) OK
+__?n =?= y (Meta-Inst) ERR
+File "./test-suite/munifytest.v", line 109, characters 71-91:
+The command has indeed failed with message:
+In environment
+x : nat
+y : nat
+z : nat
+The term "conj eq_refl eq_refl" has type "?x = ?x /\ ?x0 = ?x0"
+while it is expected to have type "?n = ?n@{y:=z; z:=z} /\ ?n = y".
+STATS:	878		161

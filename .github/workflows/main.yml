@@ -20,12 +20,23 @@ jobs:
     steps:    
     # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
     - name: checkout
-      uses: actions/checkout@v2
+      uses: actions/checkout@v5
  
     - uses: coq-community/docker-coq-action@v1
     # See https://github.com/coq-community/docker-coq-action#readme
     # for details on docker-coq-action's syntax and provided features.
       with:
-        opam_file: 'opam'
+        opam_file: 'unicoq.opam'
         coq_version: 'dev'
- 
+        before_install: |
+          opam pin remove --no-action --yes dune
+        script: |
+          opam install --with-test -y -v -j 2 "$PACKAGE"
+          opam list
+        after_script: |
+          smoke_dir="$(mktemp -d)"
+          printf '%s\n' \
+            'From Unicoq Require Import Unicoq.' \
+            'Goal True. Proof. munify nat nat. exact I. Qed.' \
+            > "$smoke_dir/smoke.v"
+          rocq compile "$smoke_dir/smoke.v"

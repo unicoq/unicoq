@@ -260,6 +260,11 @@ let ise_array2 f v1 v2 evd =
 
 (** {2 Functions for debugging} *)
 
+let test_mode_output s =
+  if !Flags.test_mode then
+    Str.global_replace (Str.regexp "\\bUniv\\b") "Type" s
+  else s
+
 let latexify s =
   let open Str in
   let s = global_replace (regexp "\\\\") "\\\\\\\\" s in
@@ -281,8 +286,8 @@ let log_eq env rule conv_t t1 t2 (l, sigma) =
     in
     let str1 = Pp.string_of_ppcmds (ppcmd_of env t1) in
     let str2 = Pp.string_of_ppcmds (ppcmd_of env t2) in
-    let str1 = latexify str1 in
-    let str2 = latexify str2 in
+    let str1 = latexify (test_mode_output str1) in
+    let str2 = latexify (test_mode_output str2) in
     let l = Logger.newNode !trace (rule, (conv_t, str1, str2)) l in
     (l, ES.Success sigma)
 
@@ -302,8 +307,8 @@ let debug_str s _l =
     ()
 
 let debug_eq env sigma t c1 c2 _l =
-  let s1 = string_of_ppcmds (Printer.pr_econstr_env env sigma (applist c1)) in
-  let s2 = string_of_ppcmds (Printer.pr_econstr_env env sigma (applist c2)) in
+  let s1 = test_mode_output (string_of_ppcmds (Printer.pr_econstr_env env sigma (applist c1))) in
+  let s2 = test_mode_output (string_of_ppcmds (Printer.pr_econstr_env env sigma (applist c2))) in
   Printf.printf "%s %s %s\n" s1 (if t == C.CONV then "=?=" else "<?=") s2;
   flush_all ()
 

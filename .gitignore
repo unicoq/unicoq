@@ -54,3 +54,4 @@ src/unitactics.ml
 _build
 .merlin
 *.install
+_RocqProject

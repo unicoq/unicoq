@@ -4,6 +4,7 @@
 (*                    Matthieu Sozeau <mattam@mattam.org>.                                      *)
 (************************************************************************************************)
 
-Declare ML Module "coq-unicoq.plugin".
+From Corelib Require Init.Ltac.
+Declare ML Module "unicoq.plugin".
 
 Global Set Use Unicoq.

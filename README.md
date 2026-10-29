@@ -51,22 +51,31 @@ in [Rocq's repository](https://rocq-prover.org/opam/released):
 opam repo add rocq-released https://rocq-prover.org/opam/released
 opam install coq-unicoq
 ```
-Otherwise, you should have rocq, ocamlc and make in your path.
-Then simply do:
+To build the development version from this checkout, use an opam switch
+with Rocq master and install its dependencies and the plugin with:
 ```
-rocq makefile -f _CoqProject -o Makefile
+opam install . --deps-only --with-test
+opam install . --with-test
 ```
-To generate a makefile from the `_CoqProject` file, then `make`.
-This will consecutively build the plugin, the supporting
-theories and the test-suite file.
+The development build requires OCaml 4.14 or newer and dune 3.24 or newer.
+With those dependencies already installed, you can instead build and test
+without installing the plugin:
+```
+dune build @all
+dune runtest
+```
+To install the dune build into the current opam switch, run:
+```
+dune install --prefix "$(opam var prefix)" unicoq
+```
 
-You can then either `make install` the plugin or leave it in its
-current directory. To be able to import it from anywhere in Coq,
-simply add the following to `~/.rocqrc`:
-```
-Add LoadPath "path_to_unicoq/theories" as Unicoq.
-Add ML Path "path_to_unicoq/src".
-```
+## Hacking
+
+Dune versions before 3.25 do not add all required OCaml paths to generated
+`_RocqProject` files (https://github.com/ocaml/dune/issues/16555). This leads
+to failures in ProofGeneral and other editors that rely on these files. We
+provide a direnv file , `.envrc`, that adds the missing paths. Start your
+editor from an environment that has been extended with `.envrc`'s contents.
 
 ## Usage
 

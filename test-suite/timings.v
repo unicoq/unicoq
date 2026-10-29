@@ -17,11 +17,12 @@ Require Import ssreflect.
 Unset Unicoq Debug.
 
 Goal True.
+Proof.
   pollute 30.
   evar (x : nat).
   clear H9.
   evar (y : nat).
-  Time (apply: ((fun e: H1 + H2 + H3 + x = H4 + H5 + H6 + y => I) eq_refl)). (* ~2 secs. it is exponential *)
+  apply: ((fun e: H1 + H2 + H3 + x = H4 + H5 + H6 + y => I) eq_refl).
   Unshelve.
   - exact: 0.
   - exact: 1. 
