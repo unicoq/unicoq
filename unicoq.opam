@@ -13,4 +13,4 @@ depends: [
   "dune" {>= "3.24"}
   "rocq-core" {= "dev"}
 ]
-synopsis: "An enhanced unification algorithm for Rocq"
+synopsis: "An formalized unification algorithm for Rocq"
