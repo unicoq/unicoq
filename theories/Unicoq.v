@@ -4,7 +4,7 @@
 (*                    Matthieu Sozeau <mattam@mattam.org>.                                      *)
 (************************************************************************************************)
 
-Declare ML Module "rocq-runtime.plugins.ltac".
+From Corelib Require Init.Ltac.
 Declare ML Module "unicoq.plugin".
 
 Global Set Use Unicoq.

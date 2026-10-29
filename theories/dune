@@ -4,4 +4,5 @@
  (synopsis "Unicoq Plugin")
  (generate_project_file)
  (no_corelib)
+ (theories Corelib)
  (plugins rocq-runtime.plugins.ltac unicoq.plugin))
