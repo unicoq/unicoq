@@ -3,6 +3,6 @@
  (package unicoq)
  (synopsis "Unicoq Plugin")
  (generate_project_file)
- (no_corelib)
+ (stdlib no)
  (theories Corelib)
  (plugins rocq-runtime.plugins.ltac unicoq.plugin))
