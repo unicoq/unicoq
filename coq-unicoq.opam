@@ -10,7 +10,7 @@ build: [
 ]
 depends: [
   "ocaml" {>= "4.14"}
-  "dune" {>= "3.24"}
+  "dune" {>= "3.23"}
   "rocq-core" {= "dev"}
 ]
 synopsis: "An formalized unification algorithm for Rocq"

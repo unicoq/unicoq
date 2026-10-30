@@ -5,6 +5,6 @@
 (************************************************************************************************)
 
 From Corelib Require Init.Ltac.
-Declare ML Module "unicoq.plugin".
+Declare ML Module "coq-unicoq.plugin".
 
 Global Set Use Unicoq.

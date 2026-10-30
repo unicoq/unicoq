@@ -57,7 +57,7 @@ with Rocq master and install its dependencies and the plugin with:
 opam install . --deps-only --with-test
 opam install . --with-test
 ```
-The development build requires OCaml 4.14 or newer and dune 3.24 or newer.
+The development build requires OCaml 4.14 or newer and dune 3.23 or newer.
 With those dependencies already installed, you can instead build and test
 without installing the plugin:
 ```
@@ -66,7 +66,7 @@ dune runtest
 ```
 To install the dune build into the current opam switch, run:
 ```
-dune install --prefix "$(opam var prefix)" unicoq
+dune install --prefix "$(opam var prefix)" coq-unicoq
 ```
 
 ## Hacking

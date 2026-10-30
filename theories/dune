@@ -1,8 +1,8 @@
 (rocq.theory
  (name Unicoq) ; This determines the -R flag
- (package unicoq)
+ (package coq-unicoq)
  (synopsis "Unicoq Plugin")
  (generate_project_file)
- (no_corelib)
+ (stdlib no)
  (theories Corelib)
- (plugins rocq-runtime.plugins.ltac unicoq.plugin))
+ (plugins rocq-runtime.plugins.ltac coq-unicoq.plugin))

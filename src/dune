@@ -1,6 +1,6 @@
 (library
  (name unicoq)
- (public_name unicoq.plugin)
+ (public_name coq-unicoq.plugin)
  ; Rocq default set of warnings
  (flags :standard -w -9-27)
  (libraries rocq-runtime.plugins.ltac))
