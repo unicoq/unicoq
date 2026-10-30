@@ -7,4 +7,4 @@
   (:standard -test-mode))
  (generate_project_file)
  (theories Unicoq)
- (plugins rocq-runtime.plugins.ltac unicoq.plugin))
+ (plugins rocq-runtime.plugins.ltac coq-unicoq.plugin))

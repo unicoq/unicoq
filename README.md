@@ -66,7 +66,7 @@ dune runtest
 ```
 To install the dune build into the current opam switch, run:
 ```
-dune install --prefix "$(opam var prefix)" unicoq
+dune install --prefix "$(opam var prefix)" coq-unicoq
 ```
 
 ## Hacking

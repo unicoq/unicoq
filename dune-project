@@ -2,4 +2,4 @@
 (using rocq 0.13)
 
 (package
- (name unicoq))
+ (name coq-unicoq))
