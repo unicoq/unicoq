@@ -654,30 +654,52 @@ let check_conv_record env sigma (t1,l1) (t2,l2) =
         let gr1 = GlobRef.ConstRef c1 in
         (gr1, inst), Array.to_list l1
     in
-    let (sigma, solution), l2_effective =
-      try
-        let open ValuePattern in
-        match kind sigma t2 with
-            Prod (_,a,b) -> (* assert (l2=[]); *)
-                    if Termops.dependent sigma (mkRel 1) b then raise Not_found
-              else CanonicalSolution.find env sigma (proji, Prod_cs),[a;Termops.pop b]
-          | Sort s ->
-              CanonicalSolution.find env sigma
-                (proji, Sort_cs (ESorts.quality_or_set sigma s)),[]
-          | _ ->
-              let c2,_ = EConstr.destRef sigma t2 in
-              CanonicalSolution.find env sigma (proji, Const_cs c2),l2
-      with Not_found | Constr.DestKO ->
-        CanonicalSolution.find env sigma (proji, Default_cs),[]
-    in
     let open CanonicalSolution in
-    let params1, c1, extra_args1 =
-      match CList.chop solution.nparams l1 with
-      | params1, c1::extra_args1 -> params1, c1, extra_args1
-      | _ -> raise Not_found in
-    let us2,extra_args2 = CList.chop (List.length solution.cvalue_arguments) l2_effective in
-    sigma,solution.constant,solution.abstractions_ty,(solution.params,params1),(solution.cvalue_arguments,us2),(extra_args1,extra_args2),c1,
-    (solution.cvalue_abstraction,applist(t2,l2))
+    let pat, args2' =
+      try
+        let pat, _, args = ValuePattern.of_constr sigma t2 in
+        pat, args
+      with Constr.DestKO -> ValuePattern.Default_cs, []
+    in
+    let decompose_solution solution is_default =
+      let params1, c1, extra_args1 =
+        match CList.chop solution.nparams l1 with
+        | params1, c1::extra_args1 -> params1, c1, extra_args1
+        | _ -> raise Not_found in
+      (* A primitive projection keeps its subject outside the application
+         spine.  Consequently, the arguments following the projection must
+         be split from the right-hand spine before they are matched against
+         the canonical value's arguments. *)
+      let nargs = List.length l2 - List.length extra_args1 in
+      if nargs < 0 then raise Not_found;
+      let args2, extra_args2 = CList.chop nargs l2 in
+      let l2_effective =
+        if is_default then begin
+          (* A default canonical value has no arguments.  Accepting one here
+             with a non-empty spine would silently discard those arguments. *)
+          match solution.cvalue_arguments with
+          | [] -> []
+          | _ -> raise Not_found
+        end
+        else if List.length solution.cvalue_arguments = nargs + List.length args2'
+        then args2' @ args2
+        else raise Not_found
+      in
+      params1, c1, extra_args1, l2_effective, extra_args2, applist(t2,args2)
+    in
+    let (sigma, solution), (params1, c1, extra_args1, l2_effective, extra_args2, rhs_prefix) =
+      try
+        if pat = ValuePattern.Default_cs then raise Not_found;
+        let sigma, solution = CanonicalSolution.find env sigma (proji, pat) in
+        (sigma, solution), decompose_solution solution false
+      with Not_found ->
+        let sigma, solution = CanonicalSolution.find env sigma (proji, ValuePattern.Default_cs) in
+        (sigma, solution), decompose_solution solution true
+    in
+    let us2 = l2_effective in
+    let canonical_head = fst (decompose_app_list sigma solution.body) in
+    sigma,(canonical_head,t2),solution.constant,solution.abstractions_ty,(solution.params,params1),(solution.cvalue_arguments,us2),(extra_args1,extra_args2),c1,
+    (solution.cvalue_abstraction,rhs_prefix)
   with Failure _ | Not_found ->
     raise ProjectionNotFound
 
@@ -963,7 +985,7 @@ module struct
           else
             begin
               try_run_and_unify env t t' (dbg, sigma)
-              ||= try_canonical_structures env t t' sigma
+              ||= try_canonical_structures conv_t env t t' sigma
               ||= try_app_fo conv_t env t t' sigma
               ||= cont conv_t env t t' sigma
             end
@@ -1022,36 +1044,56 @@ module struct
       | Some (sigma2, v') -> unify' env (decompose_app_list sigma2 v) (decompose_app_list sigma2 v') (dbg, sigma2)
       | _ -> (dbg, ES.UnifFailure (sigma1, PE.NotSameHead))
 
-  and try_canonical_structures env (c, _ as t) (c', _ as t') sigma dbg =
+  and try_canonical_structures conv_t env (c, _ as t) (c', _ as t') sigma dbg =
     if (isConst sigma c || isConst sigma c' || isProj sigma c || isProj sigma c')
         && not (eq_constr sigma c c') then
-      try conv_record dbg env sigma t t'
+      try conv_record Original conv_t dbg env sigma t t'
       with ProjectionNotFound ->
-      try conv_record dbg env sigma t' t
+      try conv_record Swap conv_t dbg env sigma t' t
       with ProjectionNotFound -> (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
     else
       (dbg, ES.UnifFailure (sigma, PE.NotSameHead))
 
-  and conv_record dbg env evd t t' =
-    let (evd,c,bs,(params,params1),(us,us2),(ts,ts1),c1,(n,t2)) = check_conv_record env evd t t' in
-    let (evd',ks,_) =
+  and conv_record dir conv_t dbg env evd t t' =
+    let (evd,(canonical_head,rhs_head),c,bs,(params,params1),(us,us2),(ts,ts1),c1,(n,rhs_prefix)) = check_conv_record env evd t t' in
+    let (evd',ks,_,type_checks) =
       List.fold_left
-        (fun (i,ks,m) b ->
-	   match n with
-           | Some n when m = n -> (i,t2::ks, m-1)
+        (fun (i,ks,m,checks) b ->
+           match n with
+           | Some n when m = n ->
+             let expected_type = substl ks b in
+             (i,rhs_prefix::ks,m-1,(rhs_prefix,expected_type)::checks)
            | _ ->
              let dloc = Loc.tag @@ Evar_kinds.InternalHole in
              let sigma = i in
              let sigma, ev = Evarutil.new_evar ~typeclass_candidate:true env sigma ~src:dloc (substl ks b) in
-             (sigma, ev :: ks, m - 1))
-        (evd,[],List.length bs) bs
+             (sigma, ev :: ks, m - 1,checks))
+        (evd,[],List.length bs,[]) bs
+    in
+    let check_type (term,expected_type) (dbg,sigma) =
+      try
+        let actual_type = Retyping.get_type_of env sigma term in
+        unify_constr ~conv_t:C.CUMUL env actual_type expected_type (dbg,sigma)
+      with Retyping.RetypeError _ ->
+        (dbg,ES.UnifFailure (sigma,PE.NotSameHead))
     in
     report (
-      log_eq_spine env "CS" C.CONV t t' (dbg, evd') &&=
+      switch dir (log_eq_spine env "CS" conv_t) t t' (dbg, evd') &&=
       ise_list2 (fun x1 x -> unify_constr env x1 (substl ks x)) params1 params &&=
       ise_list2 (fun u1 u -> unify_constr env u1 (substl ks u)) us2 us &&=
       unify' env (decompose_app_list evd' c1) (c,(List.rev ks)) &&=
-      ise_list2 (unify_constr env) ts ts1)
+      ise_list2 (unify_constr env) ts ts1 &&= fun (dbg,sigma) ->
+      List.fold_left
+        (fun state obligation -> state &&= check_type obligation)
+        (dbg,ES.Success sigma) type_checks &&= fun (dbg,sigma) ->
+      let canonical_head =
+        fst (decompose_app_list sigma (substl ks canonical_head)) in
+      let residual_pb = match kind sigma canonical_head,kind sigma rhs_head with
+        | Lambda _,_ | _,Lambda _ -> C.CONV
+        | _ -> conv_t
+      in
+      switch dir (unify_constr ~conv_t:residual_pb env)
+        canonical_head rhs_head (dbg,sigma))
 
   and try_app_fo conv_t env (c, l as t) (c', l' as t') sigma dbg =
     let nparams = List.length l in
