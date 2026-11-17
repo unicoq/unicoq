@@ -810,7 +810,7 @@ module Inst = functor (U : Unifier) -> struct
       fill_lambdas_invert_types map env sigma0 nc t' subsl args ev >>= fun (map, t') ->
       let sigma = prune_all map sigma0 in
       let sigma, t' =
-	Evarsolve.refresh_universes
+	Evarsolve.refresh_universes ~status:Evd.univ_flexible
             (if conv_t == C.CUMUL && isArity sigma t' then
 	      (* ?X <= Type(i) -> X := Type j, j <= i *)
 	      (* Type(i) <= X -> X := Type j, i <= j *)
@@ -845,7 +845,7 @@ module Inst = functor (U : Unifier) -> struct
 	      let t1 = it_mkProd_or_LetIn (mkSort j) (List.map of_rel_decl ctx1) in
               (dbg, ES.Success (Evd.downcast ev t1 sigma))
 	    else
-              let sigma, k = Evd.new_sort_variable Evd.univ_flexible_alg sigma in
+              let sigma, k = Evd.new_sort_variable Evd.univ_flexible sigma in
 	      let t1 = it_mkProd_or_LetIn (mkSort k) (List.map of_rel_decl ctx1) in
 	      let t2 = it_mkProd_or_LetIn (mkSort k) (List.map of_rel_decl ctx2) in
               let sigma = Evd.set_leq_sort (Evd.set_leq_sort sigma k i) k j in
